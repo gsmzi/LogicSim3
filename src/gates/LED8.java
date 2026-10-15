@@ -11,6 +11,7 @@ import logicsim.Gate;
 import logicsim.I18N;
 import logicsim.LSLevelEvent;
 import logicsim.Lang;
+import logicsim.WidgetHelper;
 
 /**
  * 8-fold LED
@@ -52,11 +53,8 @@ public class LED8 extends Gate {
 	@Override
 	public void drawRotated(Graphics2D g2) {
 		for (int i = 0; i < 8; i++) {
-			Color c = getPin(i).getLevel() ? color : Color.LIGHT_GRAY;
-			g2.setPaint(c);
-			g2.fillOval(origx + CONN_SIZE - 1, origy + i * 10 + 6, OVAL_RADIUS, OVAL_RADIUS);
-			g2.setPaint(Color.BLACK);
-			g2.drawOval(origx + CONN_SIZE - 1, origy + i * 10 + 6, OVAL_RADIUS, OVAL_RADIUS);
+			WidgetHelper.drawIndicator(g2, origx + CONN_SIZE - 1, origy + i * 10 + 6, OVAL_RADIUS, color,
+					getPin(i).getLevel());
 		}
 	}
 

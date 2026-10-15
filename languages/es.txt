@@ -1,4 +1,7 @@
 file=Fichero
+copy=Copiar
+paste=Pegar
+undo=Deshacer
 new=Nuevo
 open=Abrir
 save=Guardar
@@ -13,6 +16,8 @@ settings=Preferencias
 paintgrid=Visibilidad Rejilla activar/desactivar
 gatedesign=Tipo de s�mbolo en puertas
 gatedesign.iec=IEC
+gatedesign.classic.din=Clásico DIN
+gatedesign.classic.iso=Clásico ISO
 gatedesign.ansi=ANSI
 language=Lenguaje
 yes=sí

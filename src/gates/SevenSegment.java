@@ -34,36 +34,41 @@ public class SevenSegment extends Gate {
 		super.draw(g);
 		int xoffset = getX() + 29;
 		int yoffset = getY() + 16;
-		g.setStroke(new BasicStroke(1));
+		g.setStroke(new BasicStroke(1.2f));
+		g.setColor(new Color(0xF8, 0xFA, 0xFC));
+		g.fillRoundRect(xoffset - 7, yoffset - 9, 39, 68, 8, 8);
+		g.setColor(new Color(0xCB, 0xD5, 0xE1));
+		g.drawRoundRect(xoffset - 7, yoffset - 9, 39, 68, 8, 8);
 		for (int i = 0; i < getNumInputs(); i++) {
-			g.setColor(getPin(i).getLevel() ? Color.red : new Color(0xE0, 0xE0, 0xE0));
+			boolean on = getPin(i).getLevel();
+			g.setColor(on ? new Color(0xEF, 0x44, 0x44) : new Color(0xE2, 0xE8, 0xF0));
 			switch (i) {
 			case 0:
-				drawHorizontalSegment(g, xoffset + 1, yoffset + 1);
+				drawHorizontalSegment(g, xoffset + 1, yoffset + 1, on);
 				break;
 			case 1:
-				drawVerticalSegment(g, xoffset + 23, yoffset + 2);
+				drawVerticalSegment(g, xoffset + 23, yoffset + 2, on);
 				break;
 			case 2:
-				drawVerticalSegment(g, xoffset + 23, yoffset + 25);
+				drawVerticalSegment(g, xoffset + 23, yoffset + 25, on);
 				break;
 			case 3:
-				drawHorizontalSegment(g, xoffset + 1, yoffset + 47);
+				drawHorizontalSegment(g, xoffset + 1, yoffset + 47, on);
 				break;
 			case 4:
-				drawVerticalSegment(g, xoffset, yoffset + 25);
+				drawVerticalSegment(g, xoffset, yoffset + 25, on);
 				break;
 			case 5:
-				drawVerticalSegment(g, xoffset, yoffset + 2);
+				drawVerticalSegment(g, xoffset, yoffset + 2, on);
 				break;
 			case 6:
-				drawHorizontalSegment(g, xoffset + 1, yoffset + 24);
+				drawHorizontalSegment(g, xoffset + 1, yoffset + 24, on);
 				break;
 			}
 		}
 	}
 
-	private void drawHorizontalSegment(Graphics2D g2, int x, int y) {
+	private void drawHorizontalSegment(Graphics2D g2, int x, int y, boolean on) {
 		Path2D path = new Path2D.Double();
 		path.moveTo(x, y);
 		path.lineTo(x + 2, y - 2);
@@ -71,10 +76,13 @@ public class SevenSegment extends Gate {
 		path.lineTo(x + 21, y);
 		path.lineTo(x + 19, y + 2);
 		path.lineTo(x + 2, y + 2);
+		path.closePath();
 		g2.fill(path);
+		g2.setColor(on ? new Color(0xB9, 0x1C, 0x1C) : new Color(0xCB, 0xD5, 0xE1));
+		g2.draw(path);
 	}
 
-	private void drawVerticalSegment(Graphics2D g2, int x, int y) {
+	private void drawVerticalSegment(Graphics2D g2, int x, int y, boolean on) {
 		Path2D path = new Path2D.Double();
 		path.moveTo(x, y);
 		path.lineTo(x + 2, y + 2);
@@ -82,7 +90,10 @@ public class SevenSegment extends Gate {
 		path.lineTo(x, y + 21);
 		path.lineTo(x - 2, y + 19);
 		path.lineTo(x - 2, y + 2);
+		path.closePath();
 		g2.fill(path);
+		g2.setColor(on ? new Color(0xB9, 0x1C, 0x1C) : new Color(0xCB, 0xD5, 0xE1));
+		g2.draw(path);
 	}
 
 	@Override

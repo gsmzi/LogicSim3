@@ -25,8 +25,15 @@ import java.awt.print.PageFormat;
 import java.awt.print.Printable;
 import java.awt.print.PrinterException;
 import java.awt.print.PrinterJob;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.Map;
+import java.util.Properties;
+import java.util.Set;
+import java.util.Vector;
 
 import javax.swing.event.MouseInputAdapter;
+import javax.swing.SwingUtilities;
 
 public class LSPanel extends Viewer implements Printable, CircuitChangedListener, LSRepaintListener {
 	public class LogicSimPainterGraphics implements Painter {
@@ -106,6 +113,7 @@ public class LSPanel extends Viewer implements Printable, CircuitChangedListener
 				// drag parts
 				notifyZoomPos(scaleX, new Point(e.getX(), e.getY()));
 				for (CircuitPart part : parts) {
+					recordUndoForGesture();
 					part.mouseDragged(e);
 
 					if (LSProperties.getInstance().getPropertyBoolean(LSProperties.AUTOWIRE, true)) {
@@ -122,7 +130,7 @@ public class LSPanel extends Viewer implements Printable, CircuitChangedListener
 										CircuitPart cp = g.findPartAt(x, y);
 										if (cp instanceof Pin) {
 											Pin p = (Pin) cp;
-											if (pin.isInput() == p.isOutput()) {
+											if (canAutoWire(pin, p)) {
 												// put new wire between pin and p
 												Wire w = null;
 												if (pin.isOutput())
@@ -144,6 +152,16 @@ public class LSPanel extends Viewer implements Printable, CircuitChangedListener
 				}
 				fireCircuitChanged();
 			}
+		}
+
+		private boolean canAutoWire(Pin sourcePin, Pin targetPin) {
+			if (sourcePin.isInput() != targetPin.isOutput())
+				return false;
+			return !isModuleIoGate(sourcePin.parent) && !isModuleIoGate(targetPin.parent);
+		}
+
+		private boolean isModuleIoGate(CircuitPart gate) {
+			return gate instanceof MODIN || gate instanceof MODOUT;
 		}
 
 		private void setPoint(int x, int y) {
@@ -182,6 +200,10 @@ public class LSPanel extends Viewer implements Printable, CircuitChangedListener
 
 		@Override
 		public void mousePressed(MouseEvent e) {
+			if (e.isPopupTrigger() || SwingUtilities.isRightMouseButton(e))
+				return;
+
+			undoRecordedForGesture = false;
 			e = convertToWorld(e);
 			setPoint(e.getX(), e.getY());
 			int rx = CircuitPart.round(e.getX());
@@ -204,6 +226,7 @@ public class LSPanel extends Viewer implements Printable, CircuitChangedListener
 			CircuitPart cp = circuit.findPartAt(e.getX(), e.getY());
 
 			if (currentAction == ACTION_DELPOINT && cp instanceof WirePoint && cp.parent instanceof Wire) {
+				recordUndoState();
 				cp.parent.mousePressed(new LSMouseEvent(e, ACTION_DELPOINT, null));
 			}
 			// if (cp != null)
@@ -216,6 +239,7 @@ public class LSPanel extends Viewer implements Printable, CircuitChangedListener
 			}
 
 			if (currentAction == ACTION_ADDWIRE) {
+				recordUndoState();
 				WirePoint wp = null;
 				Wire newWire = null;
 				if (cp == null) {
@@ -255,11 +279,13 @@ public class LSPanel extends Viewer implements Printable, CircuitChangedListener
 				Wire wire = circuit.getUnfinishedWire();
 				if (cp == null) {
 					// empty space clicked
+					recordUndoState();
 					wire.addPoint(rx, ry);
 				} else if (cp instanceof Pin) {
 					Pin pin = ((Pin) cp);
 					if (!expertMode && pin.isOutput())
 						return;
+					recordUndoState();
 					wire.setTo(pin);
 					wire.getTo().connect(wire);
 					wire.finish();
@@ -272,6 +298,7 @@ public class LSPanel extends Viewer implements Printable, CircuitChangedListener
 						return;
 					if (!expertMode)
 						return;
+					recordUndoState();
 					int pt = clickedWire.isAt(e.getX(), e.getY());
 					clickedWire.insertPointAfter(pt, rx, ry);
 					cp = clickedWire.findPartAt(rx, ry);
@@ -285,6 +312,7 @@ public class LSPanel extends Viewer implements Printable, CircuitChangedListener
 					WirePoint clickedWP = (WirePoint) cp;
 					// check if the clicked point belongs to another wire
 					if (clickedWP.parent.equals(wire)) {
+						recordUndoState();
 						// the clicked wirepoint belongs to the editing wire...
 						// so check if we clicked the last point of the wire to finish it
 						WirePoint lp = wire.getLastPoint();
@@ -305,6 +333,7 @@ public class LSPanel extends Viewer implements Printable, CircuitChangedListener
 						// wirepoint belongs to another wire
 						if (!expertMode)
 							return;
+						recordUndoState();
 						wire.setTo(clickedWP);
 						wire.getTo().connect(wire);
 						wire.finish();
@@ -333,6 +362,7 @@ public class LSPanel extends Viewer implements Printable, CircuitChangedListener
 					if (currentAction == Pin.HIGH || currentAction == Pin.LOW || currentAction == Pin.INVERTED
 							|| currentAction == Pin.NORMAL) {
 						// 1. if we clicked on an input modificator
+						recordUndoState();
 						pin.setLevelType(currentAction);
 						pin.changedLevel(new LSLevelEvent(new Wire(null, null), pin.level, true));
 						currentAction = ACTION_NONE;
@@ -382,6 +412,9 @@ public class LSPanel extends Viewer implements Printable, CircuitChangedListener
 
 		@Override
 		public void mouseReleased(MouseEvent e) {
+			if (e.isPopupTrigger() || SwingUtilities.isRightMouseButton(e))
+				return;
+
 			e = convertToWorld(e);
 			int x = e.getPoint().x;
 			int y = e.getPoint().y;
@@ -421,7 +454,7 @@ public class LSPanel extends Viewer implements Printable, CircuitChangedListener
 		@Override
 		public void mouseWheelMoved(MouseWheelEvent e) {
 			zoomBy(e.getX(), e.getY(), -e.getWheelRotation() * zoomingSpeed);
-			notifyZoomPos(scaleX, new Point(e.getX(), e.getY()));
+			notifyZoomPos(scaleX, screenToWorldPoint(e.getX(), e.getY()));
 		}
 	}
 
@@ -445,6 +478,9 @@ public class LSPanel extends Viewer implements Printable, CircuitChangedListener
 
 	CircuitChangedListener changeListener;
 	public Circuit circuit = new Circuit();
+	private ClipboardData clipboard;
+	private Vector<ClipboardData> undoStack = new Vector<ClipboardData>();
+	private boolean undoRecordedForGesture = false;
 
 	// current mode
 	private int currentAction;
@@ -455,6 +491,53 @@ public class LSPanel extends Viewer implements Printable, CircuitChangedListener
 	 * used for track selection, is one endpoint of a rectangle
 	 */
 	private Rectangle2D selectRect;
+
+	private static class ClipboardData {
+		Vector<GateClipboardItem> gates = new Vector<GateClipboardItem>();
+		Vector<WireClipboardItem> wires = new Vector<WireClipboardItem>();
+		int pasteCount = 0;
+	}
+
+	private static class GateClipboardItem {
+		Gate source;
+		int x;
+		int y;
+		int rotate90;
+		int mirror;
+		int numInputs;
+		Properties properties;
+		Vector<PinClipboardItem> pins = new Vector<PinClipboardItem>();
+	}
+
+	private static class PinClipboardItem {
+		Pin source;
+		int number;
+		int ioType;
+		int levelType;
+		boolean level;
+		Properties properties;
+	}
+
+	private static class WireClipboardItem {
+		EndpointClipboardItem from;
+		EndpointClipboardItem to;
+		Vector<WirePointClipboardItem> points = new Vector<WirePointClipboardItem>();
+		Properties properties;
+	}
+
+	private static class EndpointClipboardItem {
+		CircuitPart source;
+		int x;
+		int y;
+		boolean show;
+	}
+
+	private static class WirePointClipboardItem {
+		WirePoint source;
+		int x;
+		int y;
+		boolean show;
+	}
 
 	public LSPanel() {
 		this.setSize(panelSize);
@@ -498,6 +581,8 @@ public class LSPanel extends Viewer implements Printable, CircuitChangedListener
 	public void clear() {
 		circuit.deselectAll();
 		currentAction = 0;
+		undoStack.clear();
+		undoRecordedForGesture = false;
 		circuit.clear();
 		repaint();
 	}
@@ -536,13 +621,272 @@ public class LSPanel extends Viewer implements Printable, CircuitChangedListener
 		}
 	}
 
+	public void copySelected() {
+		CircuitPart[] selected = circuit.getSelected();
+		if (selected.length == 0)
+			return;
+
+		Set<Gate> selectedGates = new HashSet<Gate>();
+		Set<Wire> selectedWires = new HashSet<Wire>();
+		Set<WirePoint> selectedWirePoints = new HashSet<WirePoint>();
+		for (CircuitPart part : selected) {
+			if (part instanceof Gate)
+				selectedGates.add((Gate) part);
+			else if (part instanceof Wire)
+				selectedWires.add((Wire) part);
+			else if (part instanceof WirePoint)
+				selectedWirePoints.add((WirePoint) part);
+		}
+
+		ClipboardData data = new ClipboardData();
+		for (Gate gate : selectedGates)
+			data.gates.add(copyGate(gate));
+
+		for (Wire wire : circuit.getWires()) {
+			boolean selectedWire = selectedWires.contains(wire);
+			if (canCopyWire(wire, selectedGates, selectedWirePoints, selectedWire))
+				data.wires.add(copyWire(wire));
+		}
+
+		if (data.gates.size() == 0 && data.wires.size() == 0)
+			return;
+		clipboard = data;
+		fireStatusText(I18N.tr(Lang.COPY));
+	}
+
+	public void pasteCopied() {
+		if (clipboard == null)
+			return;
+
+		recordUndoState();
+		int offset = 40 * (clipboard.pasteCount + 1);
+		if (pasteClipboardData(clipboard, offset, true).size() == 0)
+			return;
+		clipboard.pasteCount++;
+		currentAction = ACTION_NONE;
+		fireStatusText(I18N.tr(Lang.PASTE));
+		fireCircuitChanged();
+	}
+
+	public void undo() {
+		if (undoStack.size() == 0)
+			return;
+		ClipboardData data = undoStack.remove(undoStack.size() - 1);
+		circuit.clear();
+		pasteClipboardData(data, 0, false);
+		currentAction = ACTION_NONE;
+		fireStatusText(I18N.tr(Lang.UNDO));
+		fireCircuitChanged();
+	}
+
+	public void recordUndoState() {
+		undoStack.add(createCircuitSnapshot());
+		if (undoStack.size() > 50)
+			undoStack.remove(0);
+	}
+
+	private void recordUndoForGesture() {
+		if (undoRecordedForGesture)
+			return;
+		recordUndoState();
+		undoRecordedForGesture = true;
+	}
+
+	private ClipboardData createCircuitSnapshot() {
+		ClipboardData data = new ClipboardData();
+		for (Gate gate : circuit.getGates())
+			data.gates.add(copyGate(gate));
+		for (Wire wire : circuit.getWires())
+			data.wires.add(copyWire(wire));
+		return data;
+	}
+
+	private Vector<CircuitPart> pasteClipboardData(ClipboardData data, int offset, boolean selectPasted) {
+		Map<Pin, Pin> copiedPins = new HashMap<Pin, Pin>();
+		Map<WirePoint, WirePoint> copiedWirePoints = new HashMap<WirePoint, WirePoint>();
+		Vector<CircuitPart> pasted = new Vector<CircuitPart>();
+
+		circuit.deselectAll();
+		for (GateClipboardItem item : data.gates) {
+			Gate gate = pasteGate(item, offset, copiedPins);
+			if (gate == null)
+				continue;
+			circuit.addGate(gate);
+			if (selectPasted)
+				gate.select();
+			pasted.add(gate);
+		}
+
+		for (WireClipboardItem item : data.wires) {
+			CircuitPart from = pasteEndpoint(item.from, copiedPins, copiedWirePoints, offset);
+			CircuitPart to = pasteEndpoint(item.to, copiedPins, copiedWirePoints, offset);
+			if (from == null || to == null)
+				continue;
+
+			Wire wire = new Wire(from, to);
+			wire.setProperties(copyProperties(item.properties));
+			for (WirePointClipboardItem pointItem : item.points) {
+				WirePoint point = pasteWirePoint(pointItem, copiedWirePoints, offset);
+				wire.addPoint(point);
+			}
+			if (circuit.addWire(wire)) {
+				from.connect(wire);
+				to.connect(wire);
+				if (selectPasted)
+					wire.select();
+				pasted.add(wire);
+			}
+		}
+		return pasted;
+	}
+
+	private GateClipboardItem copyGate(Gate gate) {
+		GateClipboardItem item = new GateClipboardItem();
+		item.source = gate;
+		item.x = gate.getX();
+		item.y = gate.getY();
+		item.rotate90 = gate.rotate90;
+		item.mirror = gate.mirror;
+		item.numInputs = gate.getNumInputs();
+		item.properties = copyProperties(gate.getProperties());
+		for (Pin pin : gate.getPins()) {
+			PinClipboardItem pinItem = new PinClipboardItem();
+			pinItem.source = pin;
+			pinItem.number = pin.number;
+			pinItem.ioType = pin.getIoType();
+			pinItem.levelType = pin.levelType;
+			pinItem.level = pin.getInternalLevel();
+			pinItem.properties = copyProperties(pin.getProperties());
+			item.pins.add(pinItem);
+		}
+		return item;
+	}
+
+	private WireClipboardItem copyWire(Wire wire) {
+		WireClipboardItem item = new WireClipboardItem();
+		item.from = copyEndpoint(wire.getFrom());
+		item.to = copyEndpoint(wire.getTo());
+		item.properties = copyProperties(wire.getProperties());
+		for (WirePoint point : wire.getPoints()) {
+			WirePointClipboardItem pointItem = new WirePointClipboardItem();
+			pointItem.source = point;
+			pointItem.x = point.getX();
+			pointItem.y = point.getY();
+			pointItem.show = point.show;
+			item.points.add(pointItem);
+		}
+		return item;
+	}
+
+	private EndpointClipboardItem copyEndpoint(CircuitPart part) {
+		if (part == null)
+			return null;
+		EndpointClipboardItem item = new EndpointClipboardItem();
+		item.source = part;
+		item.x = part.getX();
+		item.y = part.getY();
+		if (part instanceof WirePoint)
+			item.show = ((WirePoint) part).show;
+		return item;
+	}
+
+	private boolean canCopyWire(Wire wire, Set<Gate> selectedGates, Set<WirePoint> selectedWirePoints,
+			boolean selectedWire) {
+		return canCopyEndpoint(wire.getFrom(), selectedGates, selectedWirePoints, selectedWire)
+				&& canCopyEndpoint(wire.getTo(), selectedGates, selectedWirePoints, selectedWire);
+	}
+
+	private boolean canCopyEndpoint(CircuitPart part, Set<Gate> selectedGates, Set<WirePoint> selectedWirePoints,
+			boolean selectedWire) {
+		if (part instanceof Pin)
+			return selectedGates.contains(((Pin) part).parent);
+		if (part instanceof WirePoint)
+			return selectedWire || selectedWirePoints.contains(part);
+		return false;
+	}
+
+	private Gate pasteGate(GateClipboardItem item, int offset, Map<Pin, Pin> copiedPins) {
+		Gate gate = null;
+		try {
+			gate = GateLoaderHelper.create(item.source);
+		} catch (RuntimeException e) {
+			e.printStackTrace();
+			return null;
+		}
+
+		if (gate.supportsVariableInputs() && gate.getNumInputs() != item.numInputs)
+			gate.createDynamicInputs(item.numInputs);
+		for (int i = 0; i < item.rotate90; i++)
+			gate.rotate();
+		for (int i = 0; i < item.mirror; i++)
+			gate.mirror();
+		gate.moveTo(item.x + offset, item.y + offset);
+		gate.setProperties(copyProperties(item.properties));
+
+		for (PinClipboardItem pinItem : item.pins) {
+			Pin pin = gate.getPin(pinItem.number);
+			if (pin == null)
+				continue;
+			pin.setIoType(pinItem.ioType);
+			pin.setLevelType(pinItem.levelType);
+			pin.setLevel(pinItem.level);
+			pin.setProperties(copyProperties(pinItem.properties));
+			copiedPins.put(pinItem.source, pin);
+		}
+		return gate;
+	}
+
+	private CircuitPart pasteEndpoint(EndpointClipboardItem item, Map<Pin, Pin> copiedPins,
+			Map<WirePoint, WirePoint> copiedWirePoints, int offset) {
+		if (item == null)
+			return null;
+		if (item.source instanceof Pin)
+			return copiedPins.get(item.source);
+		if (item.source instanceof WirePoint) {
+			WirePoint source = (WirePoint) item.source;
+			WirePoint point = copiedWirePoints.get(source);
+			if (point == null) {
+				point = new WirePoint(item.x + offset, item.y + offset, item.show);
+				copiedWirePoints.put(source, point);
+			}
+			return point;
+		}
+		return null;
+	}
+
+	private WirePoint pasteWirePoint(WirePointClipboardItem item, Map<WirePoint, WirePoint> copiedWirePoints,
+			int offset) {
+		WirePoint point = copiedWirePoints.get(item.source);
+		if (point == null) {
+			point = new WirePoint(item.x + offset, item.y + offset, item.show);
+			copiedWirePoints.put(item.source, point);
+		}
+		return point;
+	}
+
+	private static Properties copyProperties(Properties properties) {
+		Properties copy = new Properties();
+		for (Object keyObject : properties.keySet()) {
+			String key = (String) keyObject;
+			String value = properties.getProperty(key);
+			if (value != null)
+				copy.setProperty(key, value);
+		}
+		return copy;
+	}
+
 	/**
 	 * mirror a part if selected
 	 */
 	public void mirrorSelected() {
 		CircuitPart[] parts = circuit.getSelected();
+		boolean changed = false;
 		for (CircuitPart part : parts) {
 			if (part instanceof Gate) {
+				if (!changed) {
+					recordUndoState();
+					changed = true;
+				}
 				((Gate) part).mirror();
 			}
 		}
@@ -597,6 +941,7 @@ public class LSPanel extends Viewer implements Printable, CircuitChangedListener
 				dx -= 10;
 			else
 				dx += 10;
+			recordUndoState();
 			for (CircuitPart part : parts)
 				part.moveBy(dx, dy);
 			fireCircuitChanged();
@@ -604,6 +949,7 @@ public class LSPanel extends Viewer implements Printable, CircuitChangedListener
 		}
 
 		if (keyCode == KeyEvent.VK_DELETE || keyCode == KeyEvent.VK_BACK_SPACE) {
+			recordUndoState();
 			if (circuit.remove(parts)) {
 				currentAction = ACTION_NONE;
 				fireStatusText(NOTHING);
@@ -665,8 +1011,13 @@ public class LSPanel extends Viewer implements Printable, CircuitChangedListener
 	 */
 	public void rotateSelected() {
 		CircuitPart[] parts = circuit.getSelected();
+		boolean changed = false;
 		for (CircuitPart part : parts) {
 			if (part instanceof Gate) {
+				if (!changed) {
+					recordUndoState();
+					changed = true;
+				}
 				((Gate) part).rotate();
 			}
 		}
@@ -675,6 +1026,7 @@ public class LSPanel extends Viewer implements Printable, CircuitChangedListener
 
 	public void setAction(CircuitPart g) {
 		if (g != null) {
+			recordUndoState();
 			circuit.deselectAll();
 			// place new gate
 			int posX = (int) -offsetX / 10 * 10 + 20;
@@ -725,20 +1077,20 @@ public class LSPanel extends Viewer implements Printable, CircuitChangedListener
 	 * less zoom
 	 */
 	public void zoomOut() {
-		int x = (int) getTransformer().screenToWorldX(getWidth() / 2);
-		int y = (int) getTransformer().screenToWorldY(getHeight() / 2);
+		int x = getWidth() / 2;
+		int y = getHeight() / 2;
 		zoomBy(x, y, -0.5f);
-		notifyZoomPos(scaleX, new Point(x, y));
+		notifyZoomPos(scaleX, screenToWorldPoint(x, y));
 	}
 
 	/**
 	 * more zoom
 	 */
 	public void zoomIn() {
-		int x = (int) getTransformer().screenToWorldX(getWidth() / 2);
-		int y = (int) getTransformer().screenToWorldY(getHeight() / 2);
+		int x = getWidth() / 2;
+		int y = getHeight() / 2;
 		zoomBy(x, y, 0.5f);
-		notifyZoomPos(scaleX, new Point(x, y));
+		notifyZoomPos(scaleX, screenToWorldPoint(x, y));
 	}
 
 	/**
@@ -746,31 +1098,32 @@ public class LSPanel extends Viewer implements Printable, CircuitChangedListener
 	 */
 	public void zoomAll() {
 		Rectangle r = circuit.getBoundingBox();
+		if (r.width == 0 || r.height == 0)
+			return;
 		double zx = (double) this.getWidth() / (double) r.width;
 		double zy = (double) this.getHeight() / (double) r.height;
 		double zf = zx < zy ? zx : zy;
-		int cx = (int) (r.x + r.width / 2);
-		int cy = (int) (r.y + r.height / 2);
+		zf = Math.max(Viewer.minZoom, Math.min(Viewer.maxZoom, zf));
 
-		// calculate the circuit's center point
-		int x = (int) getTransformer().screenToWorldX(cx);
-		int y = (int) getTransformer().screenToWorldY(cy);
+		double cx = r.getCenterX();
+		double cy = r.getCenterY();
+		scaleX = zf;
+		scaleY = zf;
+		offsetX = getWidth() / 2.0 / scaleX - cx;
+		offsetY = getHeight() / 2.0 / scaleY - cy;
+		repaint();
+		notifyZoomPos(scaleX, screenToWorldPoint(getWidth() / 2, getHeight() / 2));
+	}
 
-		// calculate the current screen center point
-		int curx = (int) getTransformer().screenToWorldX(getWidth() / 2);
-		int cury = (int) getTransformer().screenToWorldY(getHeight() / 2);
-
-		int dx = curx - x;
-		int dy = cury - y;
-		translate(dx, dy);
-		zoomTo(x, y, zf);
-		notifyZoomPos(scaleX, new Point(x, y));
+	private Point screenToWorldPoint(int x, int y) {
+		return new Point((int) getTransformer().screenToWorldX(x), (int) getTransformer().screenToWorldY(y));
 	}
 
 	public void gateSettings() {
 		CircuitPart[] parts = circuit.getSelected();
 		if (parts.length == 1 && parts[0] instanceof Gate) {
 			Gate g = (Gate) parts[0];
+			recordUndoState();
 			g.showPropertiesUI(this);
 			fireCircuitChanged();
 		}

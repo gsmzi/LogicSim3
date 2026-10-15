@@ -67,11 +67,13 @@ public class Switch4 extends Gate {
 	public void draw(Graphics2D g2) {
 		super.draw(g2);
 		g2.setStroke(new BasicStroke(1));
+		Color activeColor = new Color(0x22, 0xC5, 0x5E);
+		Color inactiveColor = new Color(0xE5, 0xE7, 0xEB);
 		for (int i = 0; i < areaRect.length; i++) {
 			if (areaRect[i].width < areaRect[i].height)
-				WidgetHelper.drawSwitchVertical(g2, areaRect[i], getPin(i).getLevel(), Color.red, Color.LIGHT_GRAY);
+				WidgetHelper.drawSwitchVertical(g2, areaRect[i], getPin(i).getLevel(), activeColor, inactiveColor);
 			else
-				WidgetHelper.drawSwitchHorizontal(g2, areaRect[i], getPin(i).getLevel(), Color.red, Color.LIGHT_GRAY);
+				WidgetHelper.drawSwitchHorizontal(g2, areaRect[i], getPin(i).getLevel(), activeColor, inactiveColor);
 		}
 	}
 

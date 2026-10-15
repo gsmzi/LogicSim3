@@ -23,18 +23,22 @@ public class WidgetHelper {
 	public static void drawSwitchHorizontal(Graphics2D g2, Rectangle rect, boolean on, Color onColor, Color offColor) {
 		backup(g2);
 
-		g2.setStroke(new BasicStroke(1));
-		g2.setPaint(on ? onColor : offColor);
-		g2.fill(rect);
-		g2.setPaint(Color.BLACK);
-		g2.draw(rect);
+		Color active = soften(onColor, 0.92f);
+		Color inactive = offColor == null ? new Color(0xE5, 0xE7, 0xEB) : offColor;
+		int arc = Math.min(rect.width, rect.height);
+		g2.setStroke(new BasicStroke(1.4f));
+		g2.setPaint(on ? active : inactive);
+		g2.fillRoundRect(rect.x, rect.y, rect.width, rect.height, arc, arc);
+		g2.setPaint(new Color(0x64, 0x74, 0x8B));
+		g2.drawRoundRect(rect.x, rect.y, rect.width, rect.height, arc, arc);
+
+		int diameter = Math.max(4, rect.height - 4);
+		int knobX = on ? rect.x + rect.width - diameter - 2 : rect.x + 2;
+		int knobY = rect.y + 2;
 		g2.setPaint(Color.WHITE);
-		Rectangle switchRect = new Rectangle(rect.x, rect.y, rect.width / 2, rect.height);
-		if (on)
-			switchRect.x += rect.width / 2;
-		g2.fill(switchRect);
-		g2.setPaint(Color.BLACK);
-		g2.draw(switchRect);
+		g2.fillOval(knobX, knobY, diameter, diameter);
+		g2.setPaint(new Color(0x94, 0xA3, 0xB8));
+		g2.drawOval(knobX, knobY, diameter, diameter);
 		revert(g2);
 	}
 
@@ -45,35 +49,68 @@ public class WidgetHelper {
 	public static void drawSwitchVertical(Graphics2D g2, Rectangle rect, boolean on, Color onColor, Color offColor) {
 		backup(g2);
 
-		g2.setStroke(new BasicStroke(1));
-		g2.setPaint(on ? onColor : offColor);
-		g2.fill(rect);
-		g2.setPaint(Color.BLACK);
-		g2.draw(rect);
+		Color active = soften(onColor, 0.92f);
+		Color inactive = offColor == null ? new Color(0xE5, 0xE7, 0xEB) : offColor;
+		int arc = Math.min(rect.width, rect.height);
+		g2.setStroke(new BasicStroke(1.4f));
+		g2.setPaint(on ? active : inactive);
+		g2.fillRoundRect(rect.x, rect.y, rect.width, rect.height, arc, arc);
+		g2.setPaint(new Color(0x64, 0x74, 0x8B));
+		g2.drawRoundRect(rect.x, rect.y, rect.width, rect.height, arc, arc);
+
+		int diameter = Math.max(4, rect.width - 4);
+		int knobX = rect.x + 2;
+		int knobY = on ? rect.y + rect.height - diameter - 2 : rect.y + 2;
 		g2.setPaint(Color.WHITE);
-		Rectangle switchRect = new Rectangle(rect.x, rect.y, rect.width, rect.height / 2);
-		if (on)
-			switchRect.y += rect.height / 2;
-		g2.fill(switchRect);
-		g2.setPaint(Color.BLACK);
-		g2.draw(switchRect);
+		g2.fillOval(knobX, knobY, diameter, diameter);
+		g2.setPaint(new Color(0x94, 0xA3, 0xB8));
+		g2.drawOval(knobX, knobY, diameter, diameter);
 
 		revert(g2);
 	}
 
 	public static void drawPushSwitch(Graphics2D g2, int x, int y, int diameter, Color fill, String label) {
 		backup(g2);
-		g2.setStroke(new BasicStroke(1));
-		g2.setPaint(fill);
-		g2.fillOval(x, y, diameter, diameter);
-		g2.setPaint(Color.BLACK);
-		g2.drawOval(x, y, diameter, diameter);
+		drawIndicator(g2, x, y, diameter, fill, fill);
 		if (label != null) {
 			int textHeight = diameter * 7 / 10;
 			g2.setFont(new Font(Font.SANS_SERIF, Font.PLAIN, textHeight));
 			drawStringCentered(g2, label, x + diameter / 2, y + textHeight / 2);
 		}
 		revert(g2);
+	}
+
+	public static void drawIndicator(Graphics2D g2, int x, int y, int diameter, Color activeColor, boolean on) {
+		drawIndicator(g2, x, y, diameter, activeColor, on ? activeColor : new Color(0xE5, 0xE7, 0xEB));
+	}
+
+	private static void drawIndicator(Graphics2D g2, int x, int y, int diameter, Color activeColor, Color fillColor) {
+		backup(g2);
+		Color outline = onColor(fillColor) ? activeColor.darker() : new Color(0x94, 0xA3, 0xB8);
+		g2.setStroke(new BasicStroke(1.4f));
+		g2.setPaint(fillColor);
+		g2.fillOval(x, y, diameter, diameter);
+		g2.setPaint(outline);
+		g2.drawOval(x, y, diameter, diameter);
+		if (onColor(fillColor)) {
+			int highlight = Math.max(3, diameter / 3);
+			g2.setPaint(new Color(255, 255, 255, 170));
+			g2.fillOval(x + diameter / 5, y + diameter / 5, highlight, highlight);
+		}
+		revert(g2);
+	}
+
+	private static boolean onColor(Color color) {
+		return color != null && !(color.getRed() == 0xE5 && color.getGreen() == 0xE7 && color.getBlue() == 0xEB);
+	}
+
+	private static Color soften(Color color, float factor) {
+		if (color == null)
+			return new Color(0x22, 0xC5, 0x5E);
+		int r = Math.min(255, Math.round(color.getRed() * factor + 255 * (1 - factor)));
+		int g = Math.min(255, Math.round(color.getGreen() * factor + 255 * (1 - factor)));
+		int b = Math.min(255, Math.round(color.getBlue() * factor + 255 * (1 - factor)));
+		return new Color(r, g, b);
 	}
 
 	private static void revert(Graphics2D g2) {

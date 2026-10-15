@@ -39,6 +39,8 @@ public class DFlipFlop extends Gate {
 	@Override
 	public void draw(Graphics2D g2) {
 		super.draw(g2);
+		if (isClassicGateImageEnabled())
+			return;
 		g2.setColor(Color.black);
 		drawLabel(g2, "D-FF", Pin.smallFont);
 	}

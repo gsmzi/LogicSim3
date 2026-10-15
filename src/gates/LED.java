@@ -12,6 +12,7 @@ import logicsim.Gate;
 import logicsim.I18N;
 import logicsim.LSLevelEvent;
 import logicsim.Lang;
+import logicsim.WidgetHelper;
 
 /**
  * LED for LogicSim
@@ -62,17 +63,12 @@ public class LED extends Gate {
 
 		int y1 = ovalCenterY - ovalRadius;
 
-		Color c = getPin(0).getLevel() ? color : Color.LIGHT_GRAY;
-		g2.setPaint(c);
-
 		AffineTransform old = null;
 		if (rotate90 != 0) {
 			old = g2.getTransform();
 			g2.rotate(Math.toRadians(rotate90 * 90), xc, yc);
 		}
-		g2.fillOval(x + CONN_SIZE - 1, y1, ovalRadius * 2, ovalRadius * 2);
-		g2.setPaint(Color.BLACK);
-		g2.drawOval(x + CONN_SIZE - 1, y1, ovalRadius * 2, ovalRadius * 2);
+		WidgetHelper.drawIndicator(g2, x + CONN_SIZE - 1, y1, ovalRadius * 2, color, getPin(0).getLevel());
 		if (rotate90 != 0) {
 			g2.setTransform(old);
 		}

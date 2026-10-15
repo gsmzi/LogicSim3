@@ -4,12 +4,15 @@ import java.awt.BasicStroke;
 import java.awt.Color;
 import java.awt.Font;
 import java.awt.Graphics2D;
+import java.awt.Image;
 import java.awt.Point;
 import java.awt.Rectangle;
 import java.awt.event.MouseEvent;
 import java.awt.geom.AffineTransform;
 import java.awt.geom.Rectangle2D;
 import java.util.Vector;
+
+import javax.swing.ImageIcon;
 
 /**
  * Base class for all gate components
@@ -40,6 +43,8 @@ public class Gate extends CircuitPart {
 	public String category;
 
 	protected int height = 60;
+	private transient Image classicGateImage;
+	private transient String classicGateImageKey;
 
 	protected String label;
 
@@ -169,6 +174,8 @@ public class Gate extends CircuitPart {
 
 	public void draw(Graphics2D g2) {
 		super.draw(g2);
+		if (drawClassicGateImage(g2))
+			return;
 		drawFrame(g2);
 		AffineTransform old = null;
 		if (rotate90 != 0) {
@@ -186,6 +193,82 @@ public class Gate extends CircuitPart {
 	}
 
 	protected void drawRotated(Graphics2D g2) {
+	}
+
+	private boolean drawClassicGateImage(Graphics2D g2) {
+		Image image = getClassicGateImage();
+		if (image == null)
+			return false;
+
+		AffineTransform old = g2.getTransform();
+		int centerX = xc == -1 ? getX() + width / 2 : xc;
+		int centerY = yc == -1 ? getY() + height / 2 : yc;
+		if (rotate90 != 0)
+			g2.rotate(Math.toRadians(rotate90 * 90), centerX, centerY);
+		if (mirror == XAXIS || mirror == BOTH_AXES) {
+			g2.translate(0, 2 * centerY);
+			g2.scale(1, -1);
+		}
+		if (mirror == YAXIS || mirror == BOTH_AXES) {
+			g2.translate(2 * centerX, 0);
+			g2.scale(-1, 1);
+		}
+
+		g2.drawImage(image, getX() + CONN_SIZE - 1, getY() + CONN_SIZE - 1, getWidth() - 2 * CONN_SIZE + 2,
+				getHeight() - 2 * CONN_SIZE + 2, null);
+		g2.setTransform(old);
+		drawIO(g2);
+		return true;
+	}
+
+	private Image getClassicGateImage() {
+		String design = LSProperties.getInstance().getProperty(LSProperties.GATEDESIGN, LSProperties.GATEDESIGN_IEC);
+		String imageName = getClassicGateImageName();
+		if (imageName == null || (!LSProperties.GATEDESIGN_CLASSIC_DIN.equals(design)
+				&& !LSProperties.GATEDESIGN_CLASSIC_ISO.equals(design)))
+			return null;
+
+		String folder = LSProperties.GATEDESIGN_CLASSIC_ISO.equals(design) ? "iso" : "din";
+		String imageKey = folder + "/" + imageName;
+		if (classicGateImage != null && imageKey.equals(classicGateImageKey))
+			return classicGateImage;
+
+		java.net.URL imageUrl = Gate.class.getResource("images/classic/" + folder + "/" + imageName + ".gif");
+		if (imageUrl == null)
+			return null;
+		classicGateImage = new ImageIcon(imageUrl).getImage();
+		classicGateImageKey = imageKey;
+		return classicGateImage;
+	}
+
+	protected boolean isClassicGateImageEnabled() {
+		return getClassicGateImage() != null;
+	}
+
+	private String getClassicGateImageName() {
+		if ("and".equals(type) || "nand".equals(type))
+			return "AND";
+		if ("or".equals(type) || "nor".equals(type))
+			return "OR";
+		if ("xor".equals(type))
+			return "XOR";
+		if ("equ".equals(type))
+			return "EQU";
+		if ("not".equals(type))
+			return "NOT";
+		if ("dff".equals(type))
+			return "DFF";
+		if ("jkff".equals(type))
+			return "JKFF";
+		if ("srff".equals(type))
+			return "RSFF";
+		if ("monoflop".equals(type))
+			return "monoflop";
+		if ("offdelay".equals(type))
+			return "offdelay";
+		if ("ondelay".equals(type))
+			return "ondelay";
+		return null;
 	}
 
 	protected void drawFrame(Graphics2D g2) {

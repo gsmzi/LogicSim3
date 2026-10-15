@@ -27,6 +27,7 @@ import logicsim.LSLevelEvent;
 import logicsim.LSMouseEvent;
 import logicsim.Lang;
 import logicsim.Pin;
+import logicsim.WidgetHelper;
 
 /**
  * Switch Component for LogicSim
@@ -115,31 +116,12 @@ public class Switch extends Gate {
 		int x = getX();
 		int y = getY();
 
-		Rectangle2D rect;
-		// rect = new Rectangle2D.Float(x + width - CONN_SIZE - 12, y + 5, 13, 30);
-		rect = new Rectangle2D.Float(x + 5, y + height - CONN_SIZE - 12, 30, 13);
-
-		g.setStroke(new BasicStroke(1));
-		g.setPaint(Color.LIGHT_GRAY);
-		g.fill(rect);
-		g.setPaint(Color.BLACK);
-		g.draw(rect);
-
-		int pos = getPin(0).getLevel() ? 15 : 6;
-
-		Polygon poly = new Polygon();
-		// begin in the lower left corner and go counterclockwise
-		poly.addPoint(x + 8, y + height - 12 - CONN_SIZE);
-		poly.addPoint(x + 8, y + pos + 3);
-		poly.addPoint(x + 12, y + pos);
-		poly.addPoint(x + 28, y + pos);
-		poly.addPoint(x + 32, y + pos + 3);
-		poly.addPoint(x + 32, y + height - 12 - CONN_SIZE);
-
-		g.setPaint(color);
-		g.fillPolygon(poly);
-		g.setPaint(Color.BLACK);
-		g.drawPolygon(poly);
+		Rectangle switchRect = new Rectangle(x + 6, y + 14, 28, 15);
+		WidgetHelper.drawSwitchHorizontal(g, switchRect, getPin(0).getLevel(), color, new Color(0xE5, 0xE7, 0xEB));
+		g.setStroke(new BasicStroke(2.0f));
+		g.setPaint(getPin(0).getLevel() ? color : new Color(0x94, 0xA3, 0xB8));
+		g.drawLine(x + 34, y + 22, x + width, y + 30);
+		g.fillOval(x + width - 3, y + 27, 6, 6);
 
 		Pin c = getPin(0);
 		if (c.paintDirection == Pin.DOWN) {

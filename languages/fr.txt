@@ -1,4 +1,7 @@
 file=Fichier
+copy=Copier
+paste=Coller
+undo=Annuler
 new=Nouveau
 open=Ouvrir...
 save=Enregistrer
@@ -14,6 +17,8 @@ settings=Réglage
 paintgrid=Dessiner la grille
 gatedesign=Représentation
 gatedesign.iec=IEC
+gatedesign.classic.din=Classique DIN
+gatedesign.classic.iso=Classique ISO
 gatedesign.ansi=US
 language=Langue
 

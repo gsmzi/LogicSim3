@@ -65,7 +65,7 @@ public class LSFrame extends JFrame implements ActionListener, CircuitChangedLis
 	JLabel sbText = new JLabel();
 	JLabel sbCoordinates = new JLabel();
 
-	int popupGateIdx;
+	int popupGateIdx = -1;
 	JPopupMenu popup;
 	JMenuItem menuItem_remove;
 	JMenuItem menuItem_properties;
@@ -210,6 +210,17 @@ public class LSFrame extends JFrame implements ActionListener, CircuitChangedLis
 		// EDIT
 		mnu = new JMenu(I18N.tr(Lang.EDIT));
 
+		m = createMenuItem(Lang.UNDO, KeyEvent.VK_Z, false);
+		m.addActionListener(new ActionListener() {
+			public void actionPerformed(ActionEvent e) {
+				lspanel.undo();
+				lspanel.requestFocusInWindow();
+			}
+		});
+		mnu.add(m);
+
+		mnu.addSeparator();
+
 		m = createMenuItem(Lang.SELECTALL, KeyEvent.VK_A, false);
 		m.addActionListener(new ActionListener() {
 			public void actionPerformed(ActionEvent e) {
@@ -233,6 +244,26 @@ public class LSFrame extends JFrame implements ActionListener, CircuitChangedLis
 			public void actionPerformed(ActionEvent e) {
 				lspanel.circuit.deselectAll();
 				lspanel.repaint();
+			}
+		});
+		mnu.add(m);
+
+		mnu.addSeparator();
+
+		m = createMenuItem(Lang.COPY, KeyEvent.VK_C, false);
+		m.addActionListener(new ActionListener() {
+			public void actionPerformed(ActionEvent e) {
+				lspanel.copySelected();
+				lspanel.requestFocusInWindow();
+			}
+		});
+		mnu.add(m);
+
+		m = createMenuItem(Lang.PASTE, KeyEvent.VK_V, false);
+		m.addActionListener(new ActionListener() {
+			public void actionPerformed(ActionEvent e) {
+				lspanel.pasteCopied();
+				lspanel.requestFocusInWindow();
 			}
 		});
 		mnu.add(m);
@@ -359,9 +390,33 @@ public class LSFrame extends JFrame implements ActionListener, CircuitChangedLis
 		mGatedesignANSI.setSelected(LSProperties.GATEDESIGN_ANSI.equals(gatedesign));
 		m.add(mGatedesignANSI);
 
+		JRadioButtonMenuItem mGatedesignClassicDIN = new JRadioButtonMenuItem();
+		mGatedesignClassicDIN.setText(I18N.tr(Lang.GATEDESIGN_CLASSIC_DIN));
+		mGatedesignClassicDIN.setActionCommand(LSProperties.GATEDESIGN_CLASSIC_DIN);
+		mGatedesignClassicDIN.addActionListener(new ActionListener() {
+			public void actionPerformed(ActionEvent e) {
+				actionGateDesign(e);
+			}
+		});
+		mGatedesignClassicDIN.setSelected(LSProperties.GATEDESIGN_CLASSIC_DIN.equals(gatedesign));
+		m.add(mGatedesignClassicDIN);
+
+		JRadioButtonMenuItem mGatedesignClassicISO = new JRadioButtonMenuItem();
+		mGatedesignClassicISO.setText(I18N.tr(Lang.GATEDESIGN_CLASSIC_ISO));
+		mGatedesignClassicISO.setActionCommand(LSProperties.GATEDESIGN_CLASSIC_ISO);
+		mGatedesignClassicISO.addActionListener(new ActionListener() {
+			public void actionPerformed(ActionEvent e) {
+				actionGateDesign(e);
+			}
+		});
+		mGatedesignClassicISO.setSelected(LSProperties.GATEDESIGN_CLASSIC_ISO.equals(gatedesign));
+		m.add(mGatedesignClassicISO);
+
 		ButtonGroup btnGroup = new ButtonGroup();
 		btnGroup.add(mGatedesignIEC);
 		btnGroup.add(mGatedesignANSI);
+		btnGroup.add(mGatedesignClassicDIN);
+		btnGroup.add(mGatedesignClassicISO);
 
 		mnu.add(m);
 
@@ -532,6 +587,14 @@ public class LSFrame extends JFrame implements ActionListener, CircuitChangedLis
 		btnLS.addActionListener(new ActionListener() {
 			public void actionPerformed(ActionEvent e) {
 				actionSave(e, false);
+			}
+		});
+		btnBar.add(btnLS);
+
+		btnLS = new LSButton("modulecreate", Lang.MODULECREATE);
+		btnLS.addActionListener(new ActionListener() {
+			public void actionPerformed(ActionEvent e) {
+				actionCreateModule(e);
 			}
 		});
 		btnBar.add(btnLS);
@@ -739,12 +802,19 @@ public class LSFrame extends JFrame implements ActionListener, CircuitChangedLis
 	public void actionPerformed(ActionEvent e) { // popup menu
 		JMenuItem source = (JMenuItem) (e.getSource());
 		if (source == menuItem_remove) {
+			if (popupGateIdx < 0)
+				return;
+
+			lspanel.recordUndoState();
 			lspanel.circuit.removeGateIdx(popupGateIdx);
+			changedCircuit();
 			lspanel.repaint();
 		} else if (source == menuItem_properties) {
 			if (popupGateIdx >= 0) {
 				Gate g = (Gate) lspanel.circuit.parts.get(popupGateIdx);
+				lspanel.recordUndoState();
 				g.showPropertiesUI(this);
+				changedCircuit();
 				lspanel.repaint();
 			}
 		}
@@ -762,20 +832,30 @@ public class LSFrame extends JFrame implements ActionListener, CircuitChangedLis
 		private void maybeShowPopup(MouseEvent e) {
 			if (e.isPopupTrigger()) {
 				if (e.getSource() == lspanel) {
-					for (int i = 0; i < lspanel.circuit.parts.size(); i++) {
-						CircuitPart part = lspanel.circuit.parts.get(i);
-						if (part instanceof Gate) {
-							Gate g = (Gate) part;
-							if (g.insideFrame(e.getX(), e.getY())) {
-								popupGateIdx = i;
-								menuItem_properties.setEnabled(g.hasPropertiesUI());
-								popup.show(e.getComponent(), e.getX(), e.getY());
-								break;
-							}
-						}
-					}
+					popupGateIdx = findGateIndexAt(e);
+					if (popupGateIdx < 0)
+						return;
+
+					Gate gate = (Gate) lspanel.circuit.parts.get(popupGateIdx);
+					lspanel.circuit.deselectAll();
+					gate.select();
+					lspanel.repaint();
+					menuItem_properties.setEnabled(gate.hasPropertiesUI());
+					popup.show(e.getComponent(), e.getX(), e.getY());
 				}
 			}
+		}
+
+		private int findGateIndexAt(MouseEvent e) {
+			int x = (int) lspanel.getTransformer().screenToWorldX(e.getX());
+			int y = (int) lspanel.getTransformer().screenToWorldY(e.getY());
+
+			for (int i = lspanel.circuit.parts.size() - 1; i >= 0; i--) {
+				CircuitPart part = lspanel.circuit.parts.get(i);
+				if (part instanceof Gate && ((Gate) part).insideFrame(x, y))
+					return i;
+			}
+			return -1;
 		}
 	}
 
@@ -900,17 +980,22 @@ public class LSFrame extends JFrame implements ActionListener, CircuitChangedLis
 			if (showSaveDialog() == false)
 				return;
 		lsFile.circuit = lspanel.circuit;
+		boolean moduleFile = lsFile.circuit.isModule();
 		try {
 			XMLCreator.createXML(lsFile);
 		} catch (RuntimeException err) {
 			System.err.println(err);
 			err.printStackTrace(System.err);
 			Dialogs.messageDialog(this, I18N.tr(Lang.SAVEERROR) + " " + err.getMessage());
+			return;
 		}
 
 		setAppTitle();
 		setStatusText(String.format(I18N.tr(Lang.SAVED), lsFile.fileName));
 		lsFile.changed = false;
+		if (moduleFile) {
+			App.reloadModules();
+		}
 		fillGateList();
 	}
 
@@ -1044,6 +1129,9 @@ public class LSFrame extends JFrame implements ActionListener, CircuitChangedLis
 	 * @param e
 	 */
 	void actionLstGatesSelected(ListSelectionEvent e) {
+		if (e.getValueIsAdjusting())
+			return;
+
 		if (Simulation.getInstance().isRunning())
 			return;
 		
@@ -1093,7 +1181,11 @@ public class LSFrame extends JFrame implements ActionListener, CircuitChangedLis
 	void actionGateDesign(ActionEvent e) {
 		String gatedesign = null;
 		JRadioButtonMenuItem src = (JRadioButtonMenuItem) e.getSource();
-		if (src.getText().equals(I18N.tr(Lang.GATEDESIGN_IEC))) {
+		String actionCommand = src.getActionCommand();
+		if (LSProperties.GATEDESIGN_CLASSIC_DIN.equals(actionCommand)
+				|| LSProperties.GATEDESIGN_CLASSIC_ISO.equals(actionCommand)) {
+			gatedesign = actionCommand;
+		} else if (src.getText().equals(I18N.tr(Lang.GATEDESIGN_IEC))) {
 			if (src.isSelected())
 				gatedesign = LSProperties.GATEDESIGN_IEC;
 			else

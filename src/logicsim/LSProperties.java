@@ -20,6 +20,8 @@ public class LSProperties {
 	public static final String GATEDESIGN = "gatedesign";
 	public static final String GATEDESIGN_IEC = "iec";
 	public static final String GATEDESIGN_ANSI = "ansi";
+	public static final String GATEDESIGN_CLASSIC_DIN = "classic-din";
+	public static final String GATEDESIGN_CLASSIC_ISO = "classic-iso";
 
 	public static final String COLORMODE = "colormode";
 	public static final String COLORMODE_ON = "colormodeon";

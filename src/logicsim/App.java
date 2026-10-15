@@ -8,6 +8,7 @@ import java.lang.reflect.InvocationTargetException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -127,6 +128,8 @@ public class App {
 		File mods = new File(App.getModulePath());
 		// list of filenames in modules dir
 		String[] list = mods.list();
+		if (list == null)
+			return;
 		Arrays.sort(list, String.CASE_INSENSITIVE_ORDER);
 		// prepare list for all loaded modules
 		ArrayList<String> loadedModules = new ArrayList<String>();
@@ -163,6 +166,15 @@ public class App {
 			}
 			tries++;
 		}
+	}
+
+	public static void reloadModules() {
+		for (Iterator<Category> iterator = cats.iterator(); iterator.hasNext();) {
+			if ("module".equals(iterator.next().getTitle())) {
+				iterator.remove();
+			}
+		}
+		loadModules();
 	}
 
 	public static String getModulePath() {

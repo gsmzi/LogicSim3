@@ -2,7 +2,9 @@ package logicsim;
 
 import java.awt.Rectangle;
 import java.awt.geom.Rectangle2D;
+import java.util.HashSet;
 import java.util.Iterator;
+import java.util.Set;
 import java.util.Vector;
 
 /**
@@ -166,27 +168,55 @@ public class Circuit implements LSRepaintListener {
 		return selParts.toArray(new CircuitPart[selParts.size()]);
 	}
 
-	public boolean remove(CircuitPart[] parts) {
-		if (parts.length == 0)
+	public boolean remove(CircuitPart[] partsToRemove) {
+		if (partsToRemove.length == 0)
 			return false;
 
-		for (CircuitPart part : parts) {
+		Set<CircuitPart> selectedParts = new HashSet<CircuitPart>();
+		Set<Gate> selectedGates = new HashSet<Gate>();
+		for (CircuitPart part : partsToRemove) {
+			selectedParts.add(part);
 			if (part instanceof Gate) {
 				Gate g = (Gate) part;
-				removeGate(g);
-			} else if (part instanceof Wire) {
-				Wire w = (Wire) part;
-				w.disconnect(null);
-				this.parts.remove(part);
+				if (canRemoveGate(g))
+					selectedGates.add(g);
 			}
 		}
-		return true;
+
+		boolean changed = false;
+		for (Iterator<CircuitPart> iter = parts.iterator(); iter.hasNext();) {
+			CircuitPart part = iter.next();
+			if (part instanceof Wire && (selectedParts.contains(part) || isConnectedToAnyGate((Wire) part, selectedGates))) {
+				Wire w = (Wire) part;
+				w.disconnect(null);
+				iter.remove();
+				changed = true;
+			}
+		}
+
+		for (Gate gate : selectedGates) {
+			if (removeGate(gate))
+				changed = true;
+		}
+		return changed;
+	}
+
+	private boolean canRemoveGate(Gate g) {
+		return !g.type.equals("modin") && !g.type.equals("modout");
+	}
+
+	private boolean isConnectedToAnyGate(Wire wire, Set<Gate> gates) {
+		return isConnectedToAnyGate(wire.getFrom(), gates) || isConnectedToAnyGate(wire.getTo(), gates);
+	}
+
+	private boolean isConnectedToAnyGate(CircuitPart endpoint, Set<Gate> gates) {
+		return endpoint instanceof Pin && gates.contains(((Pin) endpoint).parent);
 	}
 
 	public boolean removeGate(Gate g) {
 		if (g == null)
 			throw new RuntimeException("cannot remove a non-gate gate is null");
-		if (g.type.equals("modin") || g.type.equals("modout"))
+		if (!canRemoveGate(g))
 			return false;
 		// 1. check all wires if they are connected to that gate
 //		for (Pin p : g.pins) {
@@ -411,6 +441,8 @@ public class Circuit implements LSRepaintListener {
 				r2d = (Rectangle2D) r22d.clone();
 			r2d.add(r22d);
 		}
+		if (r2d == null)
+			return new Rectangle(0, 0, 0, 0);
 		return new Rectangle((int) r2d.getX(), (int) r2d.getY(), (int) r2d.getWidth(), (int) r2d.getHeight());
 	}
 

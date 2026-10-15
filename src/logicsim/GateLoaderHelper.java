@@ -32,6 +32,8 @@ public class GateLoaderHelper {
 			return classes;
 
 		File[] files = directory.listFiles();
+		if (files == null)
+			return classes;
 		for (File file : files) {
 			if (!file.getName().endsWith(".class"))
 				continue;
@@ -45,6 +47,14 @@ public class GateLoaderHelper {
 
 		File directory = new File("gates");
 		File[] files = directory.listFiles();
+		File classpathRoot = new File(".");
+		if (files == null) {
+			directory = new File("dist/gates");
+			files = directory.listFiles();
+			classpathRoot = new File("dist");
+		}
+		if (files == null)
+			return new ArrayList<Class<?>>();
 		for (File file : files) {
 			if (!file.getName().endsWith(".class"))
 				continue;
@@ -53,10 +63,9 @@ public class GateLoaderHelper {
 
 		ArrayList<Class<?>> classes = new ArrayList<Class<?>>();
 
-		File file = new File(".");
 		try {
 			// Convert File to URL
-			URL url = file.toURI().toURL();
+			URL url = classpathRoot.toURI().toURL();
 			URL[] urls = new URL[] { url };
 
 			// Create a new class loader with the directory
