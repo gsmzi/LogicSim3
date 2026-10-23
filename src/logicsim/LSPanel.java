@@ -657,11 +657,16 @@ public class LSPanel extends Viewer implements Printable, CircuitChangedListener
 	public void pasteCopied() {
 		if (clipboard == null)
 			return;
+		// don't change the circuit in simulation mode
+		if (Simulation.getInstance().isRunning())
+			return;
 
 		recordUndoState();
 		int offset = 40 * (clipboard.pasteCount + 1);
-		if (pasteClipboardData(clipboard, offset, true).size() == 0)
+		if (pasteClipboardData(clipboard, offset, true).size() == 0) {
+			undoStack.remove(undoStack.size() - 1);
 			return;
+		}
 		clipboard.pasteCount++;
 		currentAction = ACTION_NONE;
 		fireStatusText(I18N.tr(Lang.PASTE));
@@ -670,6 +675,9 @@ public class LSPanel extends Viewer implements Printable, CircuitChangedListener
 
 	public void undo() {
 		if (undoStack.size() == 0)
+			return;
+		// don't change the circuit in simulation mode
+		if (Simulation.getInstance().isRunning())
 			return;
 		ClipboardData data = undoStack.remove(undoStack.size() - 1);
 		circuit.clear();
@@ -711,6 +719,7 @@ public class LSPanel extends Viewer implements Printable, CircuitChangedListener
 			Gate gate = pasteGate(item, offset, copiedPins);
 			if (gate == null)
 				continue;
+			gate.selected = false;
 			circuit.addGate(gate);
 			if (selectPasted)
 				gate.select();
@@ -724,6 +733,8 @@ public class LSPanel extends Viewer implements Printable, CircuitChangedListener
 				continue;
 
 			Wire wire = new Wire(from, to);
+			// the Wire constructor selects the new wire - same as in XMLLoader
+			wire.selected = false;
 			wire.setProperties(copyProperties(item.properties));
 			for (WirePointClipboardItem pointItem : item.points) {
 				WirePoint point = pasteWirePoint(pointItem, copiedWirePoints, offset);

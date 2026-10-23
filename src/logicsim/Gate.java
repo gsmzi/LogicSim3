@@ -201,21 +201,25 @@ public class Gate extends CircuitPart {
 			return false;
 
 		AffineTransform old = g2.getTransform();
-		int centerX = xc == -1 ? getX() + width / 2 : xc;
-		int centerY = yc == -1 ? getY() + height / 2 : yc;
-		if (rotate90 != 0)
-			g2.rotate(Math.toRadians(rotate90 * 90), centerX, centerY);
-		if (mirror == XAXIS || mirror == BOTH_AXES) {
-			g2.translate(0, 2 * centerY);
-			g2.scale(1, -1);
-		}
-		if (mirror == YAXIS || mirror == BOTH_AXES) {
-			g2.translate(2 * centerX, 0);
+		int boxWidth = getWidth() - 2 * CONN_SIZE + 2;
+		int boxHeight = getHeight() - 2 * CONN_SIZE + 2;
+		double centerX = getX() + CONN_SIZE - 1 + boxWidth / 2.0;
+		double centerY = getY() + CONN_SIZE - 1 + boxHeight / 2.0;
+		g2.translate(centerX, centerY);
+		// mirror() swaps the pins on the left/right edges for XAXIS and BOTH_AXES
+		// and the pins on the top/bottom edges for YAXIS and BOTH_AXES.
+		// Unrotated gates have their pins on the left/right edges, gates rotated by
+		// 90 or 270 degrees on the top/bottom edges - flip the image the same way.
+		if (rotate90 % 2 == 0 && (mirror == XAXIS || mirror == BOTH_AXES))
 			g2.scale(-1, 1);
-		}
-
-		g2.drawImage(image, getX() + CONN_SIZE - 1, getY() + CONN_SIZE - 1, getWidth() - 2 * CONN_SIZE + 2,
-				getHeight() - 2 * CONN_SIZE + 2, null);
+		if (rotate90 % 2 == 1 && (mirror == YAXIS || mirror == BOTH_AXES))
+			g2.scale(1, -1);
+		if (rotate90 != 0)
+			g2.rotate(Math.toRadians(rotate90 * 90));
+		// width and height are swapped for rotated gates - draw the image unrotated
+		int imageWidth = rotate90 % 2 == 0 ? boxWidth : boxHeight;
+		int imageHeight = rotate90 % 2 == 0 ? boxHeight : boxWidth;
+		g2.drawImage(image, -imageWidth / 2, -imageHeight / 2, imageWidth, imageHeight, null);
 		g2.setTransform(old);
 		drawIO(g2);
 		return true;
