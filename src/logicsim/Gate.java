@@ -680,6 +680,13 @@ public class Gate extends CircuitPart {
 	public void simulate() {
 	}
 
+	@Override
+	public void dispose() {
+		for (Pin pin : pins)
+			pin.dispose();
+		super.dispose();
+	}
+
 	public boolean supportsVariableInputs() {
 		return variableInputCountSupported;
 	}

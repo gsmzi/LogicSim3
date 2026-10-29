@@ -11,6 +11,8 @@
 	<property name="build.dir" value="build" />
 	<property name="classes.dir" value="${build.dir}/classes" />
 	<property name="jar.dir" value="${build.dir}/jar" />
+	<property name="test.classes.dir" value="${build.dir}/test-classes" />
+	<property name="test.work.dir" value="${build.dir}/test-work" />
 
 	<target name="clean">
 		<delete dir="${build.dir}" />
@@ -20,18 +22,40 @@
 
 	<target name="compile">
 		<mkdir dir="${classes.dir}" />
-		<javac target="1.8" source="1.8" srcdir="${src.dir}" destdir="${classes.dir}">
+		<javac target="1.8" source="1.8" encoding="UTF-8" debug="true" includeantruntime="false" srcdir="${src.dir}" destdir="${classes.dir}">
 			<exclude name="test/**" />
 		</javac>
 	</target>
 
+	<target name="test-compile" depends="compile">
+		<mkdir dir="${test.classes.dir}" />
+		<javac source="1.8" target="1.8" encoding="UTF-8" debug="true" includeantruntime="false"
+				srcdir="tests" destdir="${test.classes.dir}">
+			<classpath path="${classes.dir}" />
+		</javac>
+	</target>
+
+	<target name="test" depends="test-compile" description="Run headless regression tests without external dependencies">
+		<mkdir dir="${test.work.dir}" />
+		<copy todir="${test.work.dir}/modules"><fileset dir="modules" /></copy>
+		<copy todir="${test.work.dir}/circuits"><fileset dir="circuits" /></copy>
+		<copy todir="${test.work.dir}/languages"><fileset dir="languages" /></copy>
+		<echo file="${test.work.dir}/logicsim.cfg">language=en&#10;gatedesign=iec&#10;paintgrid=false</echo>
+		<java classname="logicsim.RegressionTests" fork="true" failonerror="true"
+				timeout="60000" dir="${test.work.dir}">
+			<classpath><pathelement location="${classes.dir}" /><pathelement location="${test.classes.dir}" /></classpath>
+			<sysproperty key="java.awt.headless" value="true" />
+			<sysproperty key="project.dir" value="${basedir}" />
+		</java>
+	</target>
+
 	<target name="jar" depends="compile">
-		<move file="${classes.dir}/gates" tofile="${dist.dir}/gates" />
+		<copy todir="${dist.dir}/gates"><fileset dir="${classes.dir}/gates" /></copy>
 		<mkdir dir="${jar.dir}" />
 		<copy todir="${classes.dir}/logicsim/images">
 			<fileset dir="${src.dir}/logicsim/images" />
 		</copy>
-		<jar destfile="${jar.dir}/${ant.project.name}.jar" basedir="${classes.dir}">
+		<jar destfile="${jar.dir}/${ant.project.name}.jar" basedir="${classes.dir}" excludes="gates/**">
 			<manifest>
 				<attribute name="Main-Class" value="${main-class}" />
 				<attribute name="Built-By" value="${user.name}" />

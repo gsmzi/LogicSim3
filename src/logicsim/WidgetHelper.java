@@ -161,9 +161,11 @@ public class WidgetHelper {
 	}
 
 	public static Rectangle textDimensions(Graphics2D g2, String text) {
+		if (text == null)
+			text = "";
 		FontMetrics fm = g2.getFontMetrics();
 		boolean overLine = false;
-		if (text.charAt(0) == '/') {
+		if (text.startsWith("/")) {
 			overLine = true;
 			text = text.substring(1);
 		}
@@ -179,7 +181,7 @@ public class WidgetHelper {
 			return;
 		Rectangle r = textDimensions(g2, text);
 		boolean overLine = false;
-		if (text.charAt(0) == '/') {
+		if (text.startsWith("/")) {
 			overLine = true;
 			text = text.substring(1);
 		}

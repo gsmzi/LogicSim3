@@ -169,9 +169,10 @@ public class ProgramCounter4 extends Gate {
 				}
 				setPropertyInt(STATE, content);
 				fireRepaint();
-			}
-			if (getPin(CE).getLevel() == HIGH) {
-				content++;
+			} else if (getPin(CE).getLevel() == HIGH) {
+				content = (content + 1) & 0x0f;
+				updateInternalOutputs();
+				setPropertyInt(STATE, content);
 				fireRepaint();
 			}
 		}
@@ -187,6 +188,7 @@ public class ProgramCounter4 extends Gate {
 
 		if (e.source.equals(getPin(CLEAR)) && e.level == LOW) {
 			content = 0;
+			setPropertyInt(STATE, content);
 			LSLevelEvent evt = new LSLevelEvent(this, LOW);
 			for (int i = 0; i < 4; i++) {
 				getPin(i + INTOUT).changedLevel(evt);

@@ -42,7 +42,7 @@ public class CLK extends Gate implements Runnable {
 	static final String LT_DEFAULT = "500";
 
 	private Thread thread;
-	private boolean running = false;
+	private volatile boolean running = false;
 
 	Rectangle auto = new Rectangle(39, 53, 30, 15);
 	Rectangle manual = new Rectangle(11, 53, 15, 15);
@@ -50,7 +50,7 @@ public class CLK extends Gate implements Runnable {
 
 	boolean[] osz = new boolean[oszi.width + 1];
 
-	int currentMode = PAUSE;
+	volatile int currentMode = PAUSE;
 	long lastTime;
 	int highTime = 500;
 	int lowTime = 500;
@@ -87,8 +87,6 @@ public class CLK extends Gate implements Runnable {
 	@Override
 	public void interact() {
 		if (currentMode == RUNNING) {
-			if (running && !Simulation.getInstance().isRunning())
-				running = false;
 			currentMode = PAUSE;
 		} else {
 			currentMode = RUNNING;
@@ -133,9 +131,6 @@ public class CLK extends Gate implements Runnable {
 		if (Simulation.getInstance().isRunning() && !this.running)
 			startClock();
 
-		if (!Simulation.getInstance().isRunning())
-			running = false;
-		
 		g2.setPaint(Color.black);
 		g2.setFont(Pin.smallFont);
 		String s = "CLK";
@@ -205,15 +200,26 @@ public class CLK extends Gate implements Runnable {
 		I18N.addGate("fr", type, ENTERLOW, "Durée du palier bas (ms)");
 	}
 
-	public void startClock() {
+	public synchronized void startClock() {
+		if (thread != null && thread.isAlive())
+			return;
+		running = true;
 		thread = new Thread(this);
+		thread.setDaemon(true);
 		thread.setPriority(Thread.MIN_PRIORITY);
 		thread.start();
 	}
 
 	@Override
+	public void dispose() {
+		running = false;
+		if (thread != null)
+			thread.interrupt();
+		super.dispose();
+	}
+
+	@Override
 	public void run() {
-		running = true;
 		int ms = 10 * highTime / oszi.width;
 		Date temp = new Date();
 		long lastMS = new Date().getTime();
@@ -234,22 +240,19 @@ public class CLK extends Gate implements Runnable {
 
 			Pin cout = getPin(0);
 			boolean out = cout.getLevel();
-			if (currentMode == RUNNING) {
-				if (!out && new Date().getTime() - lastTime > lowTime) {
-					getPin(1).changedLevel(new LSLevelEvent(this, HIGH));
-					cout.changedLevel(new LSLevelEvent(this, HIGH));
-					lastTime = new Date().getTime();
-				} else if (out && new Date().getTime() - lastTime > highTime) {
-					getPin(1).changedLevel(new LSLevelEvent(this, LOW));
-					cout.changedLevel(new LSLevelEvent(this, LOW));
-					lastTime = new Date().getTime();
+			Simulation.getInstance().runIfRunning(() -> {
+				if (currentMode == RUNNING) {
+					if (!out && new Date().getTime() - lastTime > lowTime) {
+						getPin(1).changedLevel(new LSLevelEvent(this, HIGH));
+						cout.changedLevel(new LSLevelEvent(this, HIGH));
+						lastTime = new Date().getTime();
+					} else if (out && new Date().getTime() - lastTime > highTime) {
+						getPin(1).changedLevel(new LSLevelEvent(this, LOW));
+						cout.changedLevel(new LSLevelEvent(this, LOW));
+						lastTime = new Date().getTime();
+					}
 				}
-			} else if (currentMode == MANUAL) {
-				// if (out && new Date().getTime() - lastTime > highTime) {
-				// cout.changedLevel(new LSLevelEvent(this, LOW));
-				// currentMode = PAUSE;
-				// }
-			}
+			});
 			try {
 				Thread.sleep(8);
 			} catch (InterruptedException e) {

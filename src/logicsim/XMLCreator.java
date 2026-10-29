@@ -4,6 +4,8 @@ import java.io.File;
 import java.io.FileOutputStream;
 import java.io.StringWriter;
 import java.util.Iterator;
+import java.util.IdentityHashMap;
+import java.util.Map;
 import java.util.Properties;
 import java.util.Vector;
 
@@ -55,7 +57,8 @@ public class XMLCreator {
 				for (Iterator<String> iterator = f.info.keySet().iterator(); iterator.hasNext();) {
 					String key = iterator.next();
 					String value = f.info.get(key);
-					Element n = doc.createElement(key);
+					Element n = doc.createElement("item");
+					n.setAttribute("key", key);
 					n.setTextContent(value);
 					node.appendChild(n);
 				}
@@ -73,8 +76,9 @@ public class XMLCreator {
 
 			if (f.getWires() != null) {
 				Element node = doc.createElement("wires");
+				Map<WirePoint, String> pointIds = new IdentityHashMap<WirePoint, String>();
 				for (Wire w : f.getWires()) {
-					Node wnode = createWireNode(doc, w);
+					Node wnode = createWireNode(doc, w, pointIds);
 					node.appendChild(wnode);
 				}
 				mainRootElement.appendChild(node);
@@ -91,8 +95,9 @@ public class XMLCreator {
 				String xmlString = writer.getBuffer().toString();
 				return xmlString;
 			} else {
-				FileOutputStream outStream = new FileOutputStream(new File(f.fileName));
-				transformer.transform(source, new StreamResult(outStream));
+				try (FileOutputStream outStream = new FileOutputStream(new File(f.fileName))) {
+					transformer.transform(source, new StreamResult(outStream));
+				}
 				f.changed = false;
 			}
 		} catch (Exception e) {
@@ -136,15 +141,8 @@ public class XMLCreator {
 		if (snode != null)
 			node.appendChild(snode);
 
-		for (Pin c : g.getInputs()) {
-			if ((g instanceof MODIN && c.getProperty(CircuitPart.TEXT) != null)
-					|| (c.getIoType() == Pin.INPUT && c.levelType != Pin.NORMAL)) {
-				node.appendChild(createPinNode(doc, c));
-			}
-		}
-		for (Pin c : g.getOutputs()) {
-			if ((g instanceof MODOUT && c.getProperty(CircuitPart.TEXT) != null)
-					|| (c.getIoType() == Pin.INPUT && c.levelType != Pin.NORMAL)) {
+		for (Pin c : g.getPins()) {
+			if (!c.getProperties().isEmpty() || c.levelType != Pin.NORMAL) {
 				node.appendChild(createPinNode(doc, c));
 			}
 		}
@@ -159,7 +157,7 @@ public class XMLCreator {
 				Element n = doc.createElement("property");
 				n.setAttribute("key", keyS);
 				String value = ps.getProperty(keyS);
-				if (value == null || value.length() == 0)
+				if (value == null)
 					continue;
 				n.setTextContent(value);
 				node.appendChild(n);
@@ -178,18 +176,16 @@ public class XMLCreator {
 			ioType = OUTPUT;
 		node.setAttribute("iotype", ioType);
 		node.setAttribute("number", String.valueOf(pin.number));
-		if (pin.isInput()) {
+		if (pin.levelType != Pin.NORMAL) {
 			int inputType = pin.levelType;
-			if (inputType != Pin.NORMAL) {
-				String inpType = "";
-				if (inputType == Pin.HIGH)
-					inpType = "high";
-				else if (inputType == Pin.LOW)
-					inpType = "low";
-				else if (inputType == Pin.INVERTED)
-					inpType = "inv";
-				node.setAttribute("type", inpType);
-			}
+			String inpType = "";
+			if (inputType == Pin.HIGH)
+				inpType = "high";
+			else if (inputType == Pin.LOW)
+				inpType = "low";
+			else if (inputType == Pin.INVERTED)
+				inpType = "inv";
+			node.setAttribute("type", inpType);
 		}
 		Node n = createSettingsNode(doc, pin.getProperties());
 		if (n != null)
@@ -197,7 +193,7 @@ public class XMLCreator {
 		return node;
 	}
 
-	private static Node createWireNode(Document doc, Wire w) {
+	private static Node createWireNode(Document doc, Wire w, Map<WirePoint, String> pointIds) {
 		if (w != null) {
 			Element n = doc.createElement("wire");
 			if (w.getFrom() != null) {
@@ -216,6 +212,7 @@ public class XMLCreator {
 					if (TYPE_WIRE.equals(type)) {
 						g.setAttribute("id", wp.getId());
 					} else {
+						g.setAttribute("id", pointIds.computeIfAbsent(wp, p -> "point-" + pointIds.size()));
 						g.setAttribute("x", String.valueOf(wp.getX()));
 						g.setAttribute("y", String.valueOf(wp.getY()));
 					}
@@ -240,6 +237,7 @@ public class XMLCreator {
 					if (TYPE_WIRE.equals(type)) {
 						g.setAttribute("id", wp.getId());
 					} else {
+						g.setAttribute("id", pointIds.computeIfAbsent(wp, p -> "point-" + pointIds.size()));
 						g.setAttribute("x", String.valueOf(wp.getX()));
 						g.setAttribute("y", String.valueOf(wp.getY()));
 					}

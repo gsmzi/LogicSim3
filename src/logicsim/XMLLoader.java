@@ -1,6 +1,10 @@
 package logicsim;
 
 import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.LinkedHashMap;
+import java.util.Iterator;
+import java.util.Map;
 import java.util.Properties;
 import java.util.Vector;
 
@@ -26,8 +30,8 @@ public class XMLLoader {
 			throw new RuntimeException(I18N.tr(Lang.READERROR) + ": version does not match");
 		Xml node = doc.optChild("info");
 		if (node != null) {
-			for (Xml n : node.children("item")) {
-				String key = n.optString("key");
+			for (Xml n : node.children(null)) {
+				String key = "item".equals(n.name()) ? n.string("key") : n.name();
 				ls.info.put(key, n.content());
 			}
 		}
@@ -44,111 +48,69 @@ public class XMLLoader {
 
 		node = doc.optChild("wires");
 		if (node != null) {
+			Map<Xml, Wire> pending = new LinkedHashMap<Xml, Wire>();
+			Map<String, WirePoint> junctions = new HashMap<String, WirePoint>();
 			for (Xml wnode : node.children(XMLCreator.TYPE_WIRE)) {
-				// Wire wire = loadWire(wnode);
-				CircuitPart from = null;
-				CircuitPart to = null;
-
-				// from node
-				Xml gnode = wnode.child("from");
-				String type = gnode.optString("type");
-				if (type == null || XMLCreator.TYPE_GATE.equals(type)) {
-					String fromGateId = gnode.string("id");
-					int fromNumber = Integer.parseInt(gnode.string("number"));
-					// try to get the gate
-					Gate fromGate = findGateById(ls.circuit.getGates(), fromGateId);
-					if (fromGate == null)
-						throw new RuntimeException(I18N.tr(Lang.READERROR) + ": cannot find gate " + fromGateId);
-					from = fromGate.getPin(fromNumber);
-				} else if (XMLCreator.TYPE_WIREPOINT.equals(type)) {
-					int x = Integer.parseInt(gnode.string("x"));
-					int y = Integer.parseInt(gnode.string("y"));
-					from = new WirePoint(x, y);
-				} else if (XMLCreator.TYPE_WIRE.equals(type)) {
-					String id = gnode.string("id");
-					// search wire
-					for (Wire w : ls.circuit.getWires()) {
-						for (WirePoint wp : w.getPoints()) {
-							if (id.equals(wp.getId())) {
-								from = wp;
-								break;
-							}
-						}
-					}
-				}
-				if (from == null)
-					System.out.println("from not found " + type);
-
-				// to node
-				gnode = wnode.child("to");
-				type = gnode.optString("type");
-				if (type == null || XMLCreator.TYPE_GATE.equals(type)) {
-					String toGateId = gnode.string("id");
-					int toNumber = Integer.parseInt(gnode.string("number"));
-
-					Gate toGate = findGateById(ls.circuit.getGates(), toGateId);
-					if (toGate == null)
-						throw new RuntimeException(I18N.tr(Lang.READERROR) + ": cannot find gate " + toGateId);
-					to = toGate.getPin(toNumber);
-				} else if (XMLCreator.TYPE_WIREPOINT.equals(type)) {
-					int x = Integer.parseInt(gnode.string("x"));
-					int y = Integer.parseInt(gnode.string("y"));
-					to = new WirePoint(x, y);
-				} else if (XMLCreator.TYPE_WIRE.equals(type)) {
-					String id = gnode.string("id");
-					// search wire
-					for (Wire w : ls.circuit.getWires()) {
-						for (WirePoint wp : w.getPoints()) {
-							if (id.equals(wp.getId())) {
-								to = wp;
-								break;
-							}
-						}
-					}
-				}
-
-				if (from == null || to == null) {
-					String s = "wire cannot be connected ";
-					if (from != null)
-						s += " " + from.getId();
-					if (to != null)
-						s += " " + to.getId();
-					// throw new RuntimeException("wire cannot be connected");
-					ls.addError(s);
-					continue;
-				}
-				Wire wire = new Wire(from, to);
-
-				// load points
+				Wire wire = new Wire(null, null);
 				for (Xml pnode : wnode.children("point")) {
-					boolean b = Boolean.parseBoolean(pnode.string("node"));
-					int xp = Integer.parseInt(pnode.string("x"));
-					int yp = Integer.parseInt(pnode.string("y"));
-					WirePoint wp = new WirePoint(xp, yp, b);
-					wp.parent = wire;
-					wire.addPoint(wp);
+					wire.addPoint(new WirePoint(pnode.integer("x"), pnode.integer("y"),
+							Boolean.parseBoolean(pnode.string("node"))));
 				}
-
-				// load properties
-				Properties ps = getProperties(wnode);
-				for (Object k : ps.keySet()) {
-					String key = (String) k;
-					wire.setProperty(key, ps.getProperty(key));
-				}
-				wire.loadProperties();
-
+				wire.setProperties(getProperties(wnode));
 				wire.selected = false;
-				ls.circuit.addWire(wire);
-				// connect wire to CircuitPart
-				from.connect(wire);
-				to.connect(wire);
-				// wire.reset();
-				// if (from instanceof Pin) {
-				// wire.changedLevel(new LSLevelEvent(from, from.getLevel()));
-				// }
+				pending.put(wnode, wire);
 			}
+			// Resolve parents first, independent of XML ordering. Legacy files identify
+			// junctions through their parent wire; new free junctions have explicit IDs.
+			boolean progress = true;
+			while (progress && !pending.isEmpty()) {
+				progress = false;
+				for (Iterator<Map.Entry<Xml, Wire>> it = pending.entrySet().iterator(); it.hasNext();) {
+					Map.Entry<Xml, Wire> entry = it.next();
+					Xml wnode = entry.getKey();
+					CircuitPart from = loadEndpoint(wnode.child("from"), ls.circuit, junctions);
+					Xml toNode = wnode.optChild("to");
+					CircuitPart to = toNode == null ? null : loadEndpoint(toNode, ls.circuit, junctions);
+					if (from == null || (toNode != null && to == null))
+						continue;
+					Wire wire = entry.getValue();
+					wire.setFrom(from);
+					wire.setTo(to);
+					if (ls.circuit.addWire(wire)) {
+						from.connect(wire);
+						if (to != null) to.connect(wire);
+					}
+					it.remove();
+					progress = true;
+				}
+			}
+			for (Xml unresolved : pending.keySet())
+				ls.addError("wire cannot be connected: " + unresolved.child("from"));
 		}
 		return ls;
+	}
+
+	private static CircuitPart loadEndpoint(Xml node, Circuit circuit, Map<String, WirePoint> junctions) {
+		String type = node.optString("type");
+		if (type == null || XMLCreator.TYPE_GATE.equals(type)) {
+			Gate gate = findGateById(circuit.getGates(), node.string("id"));
+			if (gate == null || gate.getPin(node.integer("number")) == null)
+				throw new RuntimeException("Cannot find pin: " + node.string("id"));
+			return gate.getPin(node.integer("number"));
+		}
+		if (XMLCreator.TYPE_WIREPOINT.equals(type)) {
+			String id = node.optString("id");
+			if (id != null && junctions.containsKey(id)) return junctions.get(id);
+			WirePoint point = new WirePoint(node.integer("x"), node.integer("y"));
+			if (id != null) junctions.put(id, point);
+			return point;
+		}
+		if (XMLCreator.TYPE_WIRE.equals(type)) {
+			for (Wire wire : circuit.getWires())
+				for (WirePoint point : wire.getPoints())
+					if (node.string("id").equals(point.getId())) return point;
+		}
+		return null;
 	}
 
 	private static Gate loadGate(Xml gnode) {
@@ -250,30 +212,21 @@ public class XMLLoader {
 	}
 
 	private static void loadPins(Gate gate, Xml gnode) {
-		// pins: in/output nodes (labels, numbers)
 		for (Xml inode : gnode.children("pin")) {
-			String ioType = inode.string("iotype");
-			int number = Integer.parseInt(inode.string("number"));
-			Properties ps = getProperties(inode);
-			for (Object k : ps.keySet()) {
-				String key = (String) k;
-				gate.getPin(number).setProperty(key, ps.getProperty(key));
-			}
-			gate.getPin(number).loadProperties();
-
-			if (XMLCreator.INPUT.equals(ioType)) {
-				String inpType = inode.optString("type");
-				if (inpType != null) {
-					int inputType = 0;
-					if ("high".equals(inpType)) {
-						inputType = Pin.HIGH;
-					} else if ("low".equals(inpType)) {
-						inputType = Pin.LOW;
-					} else if ("inv".equals(inpType)) {
-						inputType = Pin.INVERTED;
-					}
-					gate.getPin(number).levelType = inputType;
-				}
+			int number = inode.integer("number");
+			Pin pin = gate.getPin(number);
+			if (pin == null)
+				throw new RuntimeException("Cannot find pin " + number + " in " + gate.type);
+			Properties properties = getProperties(inode);
+			for (String key : properties.stringPropertyNames())
+				pin.setProperty(key, properties.getProperty(key));
+			pin.loadProperties();
+			String type = inode.optString("type");
+			if (type != null) {
+				if ("high".equals(type)) pin.levelType = Pin.HIGH;
+				else if ("low".equals(type)) pin.levelType = Pin.LOW;
+				else if ("inv".equals(type)) pin.levelType = Pin.INVERTED;
+				else throw new RuntimeException("Unknown pin type: " + type);
 			}
 		}
 	}

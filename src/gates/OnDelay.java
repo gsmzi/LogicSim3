@@ -7,6 +7,7 @@ import java.awt.geom.Path2D;
 import javax.swing.JOptionPane;
 
 import logicsim.Gate;
+import logicsim.DelayedSignal;
 import logicsim.I18N;
 import logicsim.LSLevelEvent;
 import logicsim.Lang;
@@ -18,13 +19,13 @@ import logicsim.Lang;
  * @author Peter Gabriel
  * @version 2.0
  */
-public class OnDelay extends Gate implements Runnable {
+public class OnDelay extends Gate {
 	static final long serialVersionUID = -2350098633141393951L;
 
 	static final String DELAY = "delay";
 	static final String DELAY_DEFAULT = "500";
 
-	private Thread thread;
+	private final DelayedSignal pending = new DelayedSignal();
 	int delayTime = 1000;
 
 	public OnDelay() {
@@ -44,11 +45,9 @@ public class OnDelay extends Gate implements Runnable {
 	public void changedLevel(LSLevelEvent e) {
 		if (e.source.equals(getPin(0))) {
 			if (e.level == HIGH) {
-				// rising edge detection of input
-				thread = new Thread(this);
-				thread.setPriority(Thread.MIN_PRIORITY);
-				thread.start();
+				pending.schedule(delayTime, () -> getPin(1).changedLevel(new LSLevelEvent(this, HIGH)));
 			} else {
+				pending.cancel();
 				// low let through
 				LSLevelEvent evt = new LSLevelEvent(this, LOW);
 				getPin(1).changedLevel(evt);
@@ -57,13 +56,16 @@ public class OnDelay extends Gate implements Runnable {
 	}
 
 	@Override
-	public void run() {
-		try {
-			Thread.sleep(delayTime);
-		} catch (InterruptedException e) {
-		}
-		LSLevelEvent evt = new LSLevelEvent(this, HIGH);
-		getPin(1).changedLevel(evt);
+	public void reset() {
+		pending.cancel();
+		super.reset();
+		getPin(1).changedLevel(new LSLevelEvent(this, LOW, true));
+	}
+
+	@Override
+	public void dispose() {
+		pending.cancel();
+		super.dispose();
 	}
 
 	@Override

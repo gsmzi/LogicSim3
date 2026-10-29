@@ -158,51 +158,31 @@ public class Memory128 extends Gate {
 	@Override
 	public void changedLevel(LSLevelEvent e) {
 		super.changedLevel(e);
-
-		if (e.source.equals(getPin(WE))) {
-			int ioType = e.level ? Pin.INPUT : Pin.HIGHIMP;
-			for (int i = 0; i < 8; i++) {
-				getPin(i + DATA).setIoType(ioType);
-			}
-		}
-		// edge detection for output enable
-		if (e.source.equals(getPin(OE))) {
-			int ioType = e.level ? Pin.HIGHIMP : Pin.OUTPUT;
-			for (int i = 0; i < 8; i++) {
-				byte value = mem[address];
-				int pow = (int) Math.pow(2, i);
-				if (ioType == Pin.HIGHIMP) {
-					LSLevelEvent evt = new LSLevelEvent(this, LOW);
-					getPin(i + DATA).changedLevel(evt);
-					getPin(i + DATA).setIoType(ioType);
-				} else {
-					getPin(i + DATA).setIoType(ioType);
-					boolean b = (value & pow) == pow;
-					LSLevelEvent evt = new LSLevelEvent(this, b);
-					getPin(i + DATA).changedLevel(evt);
-				}
-			}
-		}
-
 		address = 0;
-		for (int i = ADD; i < ADD + 4; i++) {
-			int pow = (int) Math.pow(2, i - ADD);
-			address += (getPin(i).getLevel() ? 1 : 0) * pow;
-		}
+		for (int i = ADD; i < ADD + 4; i++)
+			if (getPin(i).getLevel()) address |= 1 << (i - ADD);
 
-		if (e.source.equals(getPin(CLK)) && e.level == HIGH) {
-			if (getPin(WE).getLevel() == HIGH) {
-				// write memory
-				byte value = 0;
-				for (int i = DATA; i < DATA + 8; i++) {
-					int pow = (int) Math.pow(2, i - DATA);
-					if (getPin(i).getLevel())
-						value += pow;
-				}
-				mem[address] = value;
-				setPropertyInt(STATE + address, value);
+		if (e.source.equals(getPin(CLK)) && e.level == HIGH && getPin(WE).getLevel() == HIGH) {
+			byte value = 0;
+			for (int i = DATA; i < DATA + 8; i++)
+				if (getPin(i).getLevel()) value |= 1 << (i - DATA);
+			mem[address] = value;
+			setPropertyInt(STATE + address, value);
+		}
+		boolean addressChanged = e.source instanceof Pin
+				&& ((Pin) e.source).number >= ADD && ((Pin) e.source).number < ADD + 4;
+		if (e.source.equals(getPin(OE)) || e.source.equals(getPin(WE)) || addressChanged) {
+			int ioType = getPin(WE).getLevel() == HIGH ? Pin.INPUT
+					: getPin(OE).getLevel() == LOW ? Pin.OUTPUT : Pin.HIGHIMP;
+			for (int i = DATA; i < DATA + 8; i++) {
+				if (ioType == Pin.HIGHIMP && getPin(i).isOutput())
+					getPin(i).changedLevel(new LSLevelEvent(this, LOW));
+				getPin(i).setIoType(ioType);
+				if (ioType == Pin.OUTPUT)
+					getPin(i).changedLevel(new LSLevelEvent(this, (mem[address] & (1 << i)) != 0));
 			}
 		}
+		fireRepaint();
 	}
 
 	@Override

@@ -475,6 +475,12 @@ public class Wire extends CircuitPart implements Cloneable {
 	 * @param connector
 	 */
 	public void disconnect(Pin connector) {
+		// Branches keep their junction as a free endpoint, rather than referencing
+		// a wire which is no longer part of the saved circuit.
+		for (WirePoint point : points) {
+			point.parent = null;
+			point.removeLevelListener(this);
+		}
 		if (getTo() != null) {
 			getTo().removeLevelListener(this);
 			this.removeLevelListener(getTo());
@@ -485,6 +491,12 @@ public class Wire extends CircuitPart implements Cloneable {
 			this.removeLevelListener(getFrom());
 			setFrom(null);
 		}
+	}
+
+	@Override
+	public void dispose() {
+		disconnect(null);
+		super.dispose();
 	}
 
 	@Override

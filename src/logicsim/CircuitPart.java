@@ -160,6 +160,11 @@ public abstract class CircuitPart implements LSLevelListener {
 
 	}
 
+	/** Release background work and listeners when a component leaves a circuit. */
+	public void dispose() {
+		clearListeners();
+	}
+
 	public void deselect() {
 		selected = false;
 	}

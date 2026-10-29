@@ -8,6 +8,7 @@ import java.awt.geom.Path2D;
 import javax.swing.JOptionPane;
 
 import logicsim.Gate;
+import logicsim.DelayedSignal;
 import logicsim.I18N;
 import logicsim.LSLevelEvent;
 import logicsim.Lang;
@@ -19,11 +20,11 @@ import logicsim.Lang;
  * @author Peter Gabriel
  * @version 2.0
  */
-public class MonoFlop extends Gate implements Runnable {
+public class MonoFlop extends Gate {
 
 	static final long serialVersionUID = -6063406618533983926L;
 
-	private Thread thread;
+	private final DelayedSignal pending = new DelayedSignal();
 
 	static final String HT = "hightime";
 
@@ -52,23 +53,25 @@ public class MonoFlop extends Gate implements Runnable {
 				LSLevelEvent evt = new LSLevelEvent(this, HIGH);
 				getPin(1).changedLevel(evt);
 				fireRepaint();
-				// rising edge detection of input
-				thread = new Thread(this);
-				thread.setPriority(Thread.MIN_PRIORITY);
-				thread.start();
+				pending.schedule(highTime, () -> {
+					getPin(1).changedLevel(new LSLevelEvent(this, LOW));
+					fireRepaint();
+				});
 			}
 		}
 	}
 
 	@Override
-	public void run() {
-		try {
-			Thread.sleep(highTime);
-		} catch (InterruptedException e) {
-		}
-		LSLevelEvent evt = new LSLevelEvent(this, LOW);
-		getPin(1).changedLevel(evt);
-		fireRepaint();
+	public void reset() {
+		pending.cancel();
+		super.reset();
+		getPin(1).changedLevel(new LSLevelEvent(this, LOW, true));
+	}
+
+	@Override
+	public void dispose() {
+		pending.cancel();
+		super.dispose();
 	}
 
 	@Override

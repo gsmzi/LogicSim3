@@ -587,6 +587,23 @@ public class LSPanel extends Viewer implements Printable, CircuitChangedListener
 		repaint();
 	}
 
+	/** Load completely before replacing the current document or its undo history. */
+	public LogicSimFile loadFile(String fileName) {
+		LogicSimFile loaded = XMLLoader.loadXmlFile(fileName);
+		try {
+			if (loaded.getErrorString() != null)
+				throw new RuntimeException(loaded.getErrorString());
+			loaded.circuit.reset();
+		} catch (RuntimeException error) {
+			loaded.circuit.clear();
+			throw error;
+		}
+		clear();
+		circuit = loaded.circuit;
+		circuit.setRepaintListener(this);
+		return loaded;
+	}
+
 	private MouseEvent convertToWorld(MouseEvent e) {
 		int x = (int) (getTransformer().screenToWorldX(e.getX()));
 		int y = (int) (getTransformer().screenToWorldY(e.getY()));
@@ -683,6 +700,11 @@ public class LSPanel extends Viewer implements Printable, CircuitChangedListener
 		circuit.clear();
 		pasteClipboardData(data, 0, false);
 		currentAction = ACTION_NONE;
+		Wire unfinished = circuit.getUnfinishedWire();
+		if (unfinished != null) {
+			unfinished.select();
+			currentAction = ACTION_EDITWIRE;
+		}
 		fireStatusText(I18N.tr(Lang.UNDO));
 		fireCircuitChanged();
 	}
@@ -729,7 +751,7 @@ public class LSPanel extends Viewer implements Printable, CircuitChangedListener
 		for (WireClipboardItem item : data.wires) {
 			CircuitPart from = pasteEndpoint(item.from, copiedPins, copiedWirePoints, offset);
 			CircuitPart to = pasteEndpoint(item.to, copiedPins, copiedWirePoints, offset);
-			if (from == null || to == null)
+			if (from == null || (item.to != null && to == null))
 				continue;
 
 			Wire wire = new Wire(from, to);
@@ -742,7 +764,8 @@ public class LSPanel extends Viewer implements Printable, CircuitChangedListener
 			}
 			if (circuit.addWire(wire)) {
 				from.connect(wire);
-				to.connect(wire);
+				if (to != null)
+					to.connect(wire);
 				if (selectPasted)
 					wire.select();
 				pasted.add(wire);
@@ -901,7 +924,8 @@ public class LSPanel extends Viewer implements Printable, CircuitChangedListener
 				((Gate) part).mirror();
 			}
 		}
-		repaint();
+		if (changed)
+			fireCircuitChanged();
 	}
 
 	/**

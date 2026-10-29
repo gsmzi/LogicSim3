@@ -4,6 +4,7 @@ import java.awt.Rectangle;
 import java.awt.geom.Rectangle2D;
 import java.util.HashSet;
 import java.util.Iterator;
+import java.util.Objects;
 import java.util.Set;
 import java.util.Vector;
 
@@ -27,6 +28,8 @@ public class Circuit implements LSRepaintListener {
 	}
 
 	public void clear() {
+		for (CircuitPart part : parts)
+			part.dispose();
 		parts.clear();
 	}
 
@@ -40,7 +43,7 @@ public class Circuit implements LSRepaintListener {
 		for (CircuitPart part : parts) {
 			if (part instanceof Wire) {
 				Wire w = (Wire) part;
-				if (w.getTo().equals(newWire.getTo()) && w.getFrom().equals(newWire.getFrom())) {
+				if (Objects.equals(w.getTo(), newWire.getTo()) && Objects.equals(w.getFrom(), newWire.getFrom())) {
 					// don't add
 					return false;
 				}
@@ -272,6 +275,7 @@ public class Circuit implements LSRepaintListener {
 			}
 		}
 		// checkWires();
+		g.dispose();
 		parts.remove(g);
 		return true;
 	}

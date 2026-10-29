@@ -893,10 +893,12 @@ public class LSFrame extends JFrame implements ActionListener, CircuitChangedLis
 	void actionNew(ActionEvent e) {
 		if (showDiscardDialog(I18N.tr(Lang.NEW)) == false)
 			return;
+		Simulation.getInstance().stop();
 		lsFile = new LogicSimFile(defaultCircuitFileName());
 		lsFile.circuit.setRepaintListener(lspanel);
 		setAppTitle();
 		lspanel.clear();
+		lspanel.circuit = lsFile.circuit;
 	}
 
 	/**
@@ -914,26 +916,21 @@ public class LSFrame extends JFrame implements ActionListener, CircuitChangedLis
 		File file = new File(lsFile.fileName);
 		JFileChooser chooser = new JFileChooser(file.getParent());
 		chooser.setFileFilter(setupFilter());
-		if (chooser.showOpenDialog(this) == JFileChooser.APPROVE_OPTION) {
-			lsFile.fileName = chooser.getSelectedFile().getAbsolutePath();
-		} else
+		if (chooser.showOpenDialog(this) != JFileChooser.APPROVE_OPTION)
 			return;
 
 		try {
-			lsFile = XMLLoader.loadXmlFile(lsFile.fileName);
+			lsFile = lspanel.loadFile(chooser.getSelectedFile().getAbsolutePath());
 		} catch (RuntimeException x) {
 			System.err.println(x);
 			x.printStackTrace(System.err);
 			Dialogs.messageDialog(this, I18N.tr(Lang.READERROR) + " " + x.getMessage());
+			return;
 		}
 		if (lsFile.getErrorString() != null) {
 			Dialogs.messageDialog(this, lsFile.getErrorString());
 		}
 		setAppTitle();
-		lspanel.clear();
-		lspanel.circuit = lsFile.circuit;
-		lspanel.circuit.setRepaintListener(lspanel);
-		lspanel.circuit.reset();
 	}
 
 	/**

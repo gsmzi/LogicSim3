@@ -26,7 +26,6 @@ public class XOR extends OR {
 
 	@Override
 	public void simulate() {
-		super.simulate();
 		int n = 0;
 		for (Pin p : getInputs())
 			if (p.getLevel())
@@ -34,12 +33,6 @@ public class XOR extends OR {
 		// ungerade ??
 		boolean b = n % 2 > 0;
 		getPin(0).changedLevel(new LSLevelEvent(this, b, force));
-	}
-
-	@Override
-	public void changedLevel(LSLevelEvent e) {
-		super.changedLevel(e);
-		simulate();
 	}
 
 	@Override

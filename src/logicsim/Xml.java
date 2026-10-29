@@ -8,6 +8,7 @@ import java.util.HashMap;
 import java.util.Map;
 
 import javax.xml.parsers.DocumentBuilder;
+import javax.xml.XMLConstants;
 import javax.xml.parsers.DocumentBuilderFactory;
 import javax.xml.parsers.ParserConfigurationException;
 
@@ -17,6 +18,8 @@ import org.w3c.dom.NamedNodeMap;
 import org.w3c.dom.Node;
 import org.w3c.dom.NodeList;
 import org.xml.sax.SAXException;
+import org.xml.sax.SAXParseException;
+import org.xml.sax.helpers.DefaultHandler;
 
 /**
  * XML Component
@@ -175,7 +178,20 @@ public class Xml {
 	private static Element rootElement(InputStream inputStream, String rootName) {
 		try {
 			DocumentBuilderFactory builderFactory = DocumentBuilderFactory.newInstance();
+			builderFactory.setFeature("http://apache.org/xml/features/disallow-doctype-decl", true);
+			builderFactory.setFeature("http://xml.org/sax/features/external-general-entities", false);
+			builderFactory.setFeature("http://xml.org/sax/features/external-parameter-entities", false);
+			builderFactory.setAttribute(XMLConstants.ACCESS_EXTERNAL_DTD, "");
+			builderFactory.setAttribute(XMLConstants.ACCESS_EXTERNAL_SCHEMA, "");
+			builderFactory.setXIncludeAware(false);
+			builderFactory.setExpandEntityReferences(false);
 			DocumentBuilder builder = builderFactory.newDocumentBuilder();
+			builder.setErrorHandler(new DefaultHandler() {
+				@Override
+				public void fatalError(SAXParseException error) throws SAXException {
+					throw error;
+				}
+			});
 			Document document = builder.parse(inputStream);
 			Element rootElement = document.getDocumentElement();
 			if (!rootElement.getNodeName().equals(rootName))

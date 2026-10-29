@@ -187,6 +187,12 @@ public class Module extends Gate {
 	}
 
 	@Override
+	public void dispose() {
+		lsFile.circuit.clear();
+		super.dispose();
+	}
+
+	@Override
 	public boolean showPropertiesUI(Component frame) {
 		if (moduleIn != null) {
 			String content = I18N.tr(Lang.DESCRIPTION) + ":\n";
