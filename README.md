@@ -57,3 +57,21 @@ and will be revised soon.
 ## Issues
 For issue tracking, there is a tracking system on github. It would be nice if you report a bug. 
 An email to the author is also ok.
+
+## Classroom modules and simulation feedback
+
+Bundled half/full adders are named `beispiele/HA` and `beispiele/FA` and stored in
+`modules/beispiele/`. Student modules named `HA` or `FA` can be created directly in
+`modules/`. Older circuits using the bundled short names still load; an existing
+student module takes priority. `circuits/Adder.lsc` explicitly uses the examples.
+
+In normal mode, start a branch at an input and finish it on an existing wire or
+junction; Shift-click on a wire also starts a branch. Automatic connections are
+created only when a dragged part is dropped with its pins exactly aligned.
+
+Module palette previews do not simulate. If a component receives more than 4096
+events in one uninterrupted propagation sequence, the simulation stops and shows
+an unstable-circuit message. After this stop, click a switch to prepare its input
+for the next start; propagation resumes when you click Simulate again. The
+Simulate button reflects the stopped state.
+Clocks and delayed components receive a new event budget for each external tick.

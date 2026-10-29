@@ -95,3 +95,5 @@ undo=Undo
 expert=Expert
 wire=wire
 normal=Normal
+
+simulation.unstable=Circuit oscillates (unstable state)

@@ -45,7 +45,15 @@ public class I18N {
 				System.exit(5);
 			}
 		}
+        configureDialogTexts();
 	}
+
+    static void configureDialogTexts() {
+        javax.swing.UIManager.put("OptionPane.cancelButtonText", tr(Lang.CANCEL));
+        javax.swing.UIManager.put("OptionPane.okButtonText", tr(Lang.OK));
+        javax.swing.UIManager.put("OptionPane.yesButtonText", tr(Lang.YES));
+        javax.swing.UIManager.put("OptionPane.noButtonText", tr(Lang.NO));
+    }
 
 	public static Properties load(String lang) {
 		Properties properties = new Properties();

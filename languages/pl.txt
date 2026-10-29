@@ -100,3 +100,5 @@ STATUS_REMOVEPOINT=Kliknij na przewodzie aby usun\u0105\u0107 punkt
 STATUS_SAVED=Obwód zosta\u0142 zapisany do %s
 STATUS_SETINPUT=Kliknij na wej\u015bciu aby pol\u0105czy\u0107
 TOOLTIP_ADDPOINT=Dodaj punkt do przewodu
+
+simulation.unstable=Circuit oscillates (unstable state)

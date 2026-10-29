@@ -602,6 +602,10 @@ public class LSFrame extends JFrame implements ActionListener, CircuitChangedLis
 		btnBar.add(getMenuGap());
 
 		LSToggleButton btnToggle = new LSToggleButton("play", Lang.SIMULATE);
+        bindInstabilityHandler(btnToggle, () -> {
+            changedStatusText(I18N.tr(Lang.SIMULATION_UNSTABLE));
+            lspanel.repaint();
+        });
 		btnToggle.addActionListener(new ActionListener() {
 			public void actionPerformed(ActionEvent e) {
 				actionSimulate(e);
@@ -859,6 +863,15 @@ public class LSFrame extends JFrame implements ActionListener, CircuitChangedLis
 		}
 	}
 
+    /** Bind the actual play button and ignore notifications from an earlier run. */
+    static void bindInstabilityHandler(AbstractButton button, Runnable updateStatus) {
+        Simulation.getInstance().setInstabilityListener(() -> javax.swing.SwingUtilities.invokeLater(() -> {
+            if (!Simulation.getInstance().isOscillating()) return;
+            button.setSelected(Simulation.getInstance().isRunning());
+            updateStatus.run();
+        }));
+    }
+
 	void actionSimulate(ActionEvent e) {
 		LSToggleButton btn = (LSToggleButton) e.getSource();
 
@@ -866,7 +879,7 @@ public class LSFrame extends JFrame implements ActionListener, CircuitChangedLis
 			if (!Simulation.getInstance().isRunning()) {
 				lspanel.circuit.deselectAll();
 				repaint();
-				Simulation.getInstance().start();
+				lspanel.startSimulation();
 				changedStatusText(I18N.tr(Lang.SIMULATION_STARTED));
 			}
 		} else {

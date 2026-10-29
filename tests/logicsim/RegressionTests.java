@@ -30,9 +30,16 @@ public final class RegressionTests {
         test("partial load preserves current document", RegressionTests::partialOpen);
         test("successful open replaces document", RegressionTests::successfulOpen);
         test("external XML entities are rejected", RegressionTests::externalEntity);
+        test("SR latch holds, resets and handles forbidden inputs", RegressionTests::srLatch);
+        test("new wires inherit NOT and flipflop levels without reset", RegressionTests::newWireLevel);
+        test("new branch does not retrigger existing counters", RegressionTests::branchClock);
         test("logic gate truth tables", RegressionTests::truthTables);
         test("XOR does not clock a counter spuriously", RegressionTests::xorCounter);
         test("stopping a feedback loop remains responsive", () -> { for (int i = 0; i < 25; i++) feedback(); });
+        test("NOR feedback is bounded and reports instability", RegressionTests::boundedFeedback);
+        test("stopped NOR feedback recovers through switches and one play click", RegressionTests::recoverFeedback);
+        test("old instability notification cannot deselect a restarted simulation", RegressionTests::staleInstabilityNotice);
+        test("feedback module templates never schedule events", RegressionTests::moduleTemplate);
         test("clock pauses and resumes without painting", RegressionTests::clock);
         test("null events do not block propagation", RegressionTests::nullTarget);
         test("large fanout does not lose events", RegressionTests::fanout);
@@ -54,6 +61,12 @@ public final class RegressionTests {
         test("branch loads before parent wire", RegressionTests::forwardBranch);
         test("unfinished wire save/load", RegressionTests::unfinishedSave);
         test("mirror marks changed and can be undone", RegressionTests::mirror);
+        test("text pixels match hit area and retain legacy position", RegressionTests::textHitArea);
+        test("autowire connects only at drop, never while crossing pins", RegressionTests::autoWireDrop);
+        test("normal mode branches onto wires and existing junctions", RegressionTests::normalBranches);
+        test("dialog buttons use application language", RegressionTests::dialogLanguage);
+        test("test gate is hidden but legacy files remain readable", RegressionTests::hiddenTestGate);
+        test("example module namespace and legacy aliases", RegressionTests::exampleModules);
         test("empty text can be painted and saved", RegressionTests::emptyText);
         try (DirectoryStream<Path> files = Files.newDirectoryStream(Paths.get("circuits"), "*.lsc")) {
             for (Path file : files) test("example roundtrip: " + file.getFileName(), () -> example(file));
@@ -66,6 +79,14 @@ public final class RegressionTests {
     }
 
     private static void registerGates() throws Exception {
+        if (Boolean.getBoolean("release.smoke")) {
+            App.Running_From_Jar = true;
+            java.lang.reflect.Method initialize = App.class.getDeclaredMethod("initializeGateCategories");
+            initialize.setAccessible(true); initialize.invoke(null); idle();
+            check(App.getGate("not") != null, "Packaged gates not discovered");
+            for (Category category : App.cats) check(!"test".equals(category.title), "Test category visible in release");
+            return;
+        }
         Category category = new Category("test");
         App.cats.add(category);
         category.addGate(new MODIN()); category.addGate(new MODOUT());
@@ -73,7 +94,8 @@ public final class RegressionTests {
         try (DirectoryStream<Path> files = Files.newDirectoryStream(sources, "*.java")) {
             for (Path file : files) {
                 String name = file.getFileName().toString().replace(".java", "");
-                category.addGate((Gate) Class.forName("gates." + name).getDeclaredConstructor().newInstance());
+                Gate gate = (Gate) Class.forName("gates." + name).getDeclaredConstructor().newInstance();
+                gate.loadLanguage(); category.addGate(gate);
             }
         }
         App.reloadModules(); idle();
@@ -173,6 +195,49 @@ public final class RegressionTests {
             + "'>]><logicsim version='3'><info><item key='label'>&local;</item></info></logicsim>");
         rejects(() -> XMLLoader.loadXmlFile(path.toString()));
     }
+    private static void srLatch() {
+        SRLatch latch = new SRLatch(); latch.reset();
+        int[] inputs = {0, 1, 0, 2, 0, 1, 3, 2};
+        int[] outputs = {2, 1, 1, 2, 2, 1, 0, 2};
+        for (int i = 0; i < inputs.length; i++) {
+            latch.getPin(0).setLevel((inputs[i] & 1) != 0);
+            latch.getPin(1).setLevel((inputs[i] & 2) != 0);
+            latch.changedLevel(new LSLevelEvent(latch.getPin(0), false));
+            equal(outputs[i], word(latch, 2, 2));
+        }
+        latch.getPin(0).setLevel(false); latch.getPin(1).setLevel(false);
+        latch.reset(); equal(2, word(latch, 2, 2));
+    }
+
+    private static void newWireLevel() throws Exception {
+        LSPanel panel = new LSPanel(); NOT not = new NOT(); LED led = new LED();
+        panel.circuit.addGate(not); panel.circuit.addGate(led);
+        Wire wire = connect(panel.circuit, not.getPin(1), null);
+        wire.setTo(led.getPin(0)); led.getPin(0).connect(wire); wire.finish();
+        idle(); equal(true, wire.getLevel()); equal(true, led.getPin(0).getLevel());
+        panel.startSimulation(); idle(); equal(true, led.getPin(0).getLevel()); SIM.stop();
+        for (Gate flip : new Gate[]{new DFlipFlop(), new SRLatch()}) {
+            LED indicator = new LED();
+            Wire connection = connect(panel.circuit, flip.getPin(3), indicator.getPin(0));
+            connection.initializeLevel(); idle(); equal(true, indicator.getPin(0).getLevel());
+        }
+    }
+
+    private static void branchClock() throws Exception {
+        NOT source = new NOT(); Counter counter = new Counter(); LED led = new LED();
+        Circuit circuit = new Circuit();
+        Wire trunk = connect(circuit, source.getPin(1), counter.getPin(0));
+        trunk.addPoint(200, 100); trunk.initializeLevel(); idle(); equal(1, word(counter, 1, 8));
+        Wire branch = connect(circuit, led.getPin(0), trunk.getPoints().get(0));
+        branch.initializeLevel(); idle(); equal(true, led.getPin(0).getLevel());
+        equal(1, word(counter, 1, 8));
+        // A LOW source must also clear a previously HIGH destination.
+        LED high = new LED(); high.getPin(0).setLevel(true);
+        input(source, 0, true); idle();
+        Wire low = connect(circuit, source.getPin(1), high.getPin(0)); low.initializeLevel();
+        idle(); equal(false, high.getPin(0).getLevel());
+    }
+
     private static void truthTables() {
         Gate[] gates = {new AND(), new OR(), new NAND(), new NOR(), new XOR(), new EQU()};
         for (int bits = 0; bits < 4; bits++) {
@@ -205,6 +270,121 @@ public final class RegressionTests {
         SIM.putEvent(new LSLevelEvent(gate, true, false, capture)); idle(); equal(1, capture.count.get());
         feedback.disconnect(null); gate.dispose();
     }
+    private static void boundedFeedback() throws Exception {
+        NOR a = new NOR(), b = new NOR(); Circuit circuit = new Circuit();
+        circuit.addGate(a); circuit.addGate(b);
+        connect(circuit, a.getPin(0), b.getPin(1)); connect(circuit, b.getPin(0), a.getPin(1));
+        AtomicInteger notices = new AtomicInteger(); SIM.setInstabilityListener(notices::incrementAndGet);
+        try {
+            SIM.start(); circuit.reset(); idle();
+            equal(false, SIM.isRunning()); equal(true, SIM.isOscillating()); equal(1, notices.get());
+            CaptureWire capture = new CaptureWire();
+            SIM.putEvent(new LSLevelEvent(a, true, false, capture)); idle(); equal(1, capture.count.get());
+        } finally { SIM.setInstabilityListener(() -> {}); circuit.clear(); }
+    }
+    private static void recoverFeedback() throws Exception {
+        // Recover into either stable state, using the same mouse path as the UI.
+        for (boolean set : new boolean[] { false, true }) {
+            SIM.stop();
+            LSPanel panel = new LSPanel();
+            NOR a = (NOR) at(new NOR(), 200, 100), b = (NOR) at(new NOR(), 350, 100);
+            Switch r = (Switch) at(new Switch(), 20, 100), s = (Switch) at(new Switch(), 20, 200);
+            Switch momentary = (Switch) at(new Switch(), 20, 300);
+            Properties props = new Properties(); props.setProperty("type", "momentary"); momentary.setProperties(props);
+            LED led = (LED) at(new LED(), 200, 300);
+            SIM.withoutEvents(() -> {
+                for (Gate gate : new Gate[] { a, b, r, s, momentary, led }) panel.circuit.addGate(gate);
+                connect(panel.circuit, a.getPin(0), b.getPin(1)); connect(panel.circuit, b.getPin(0), a.getPin(1));
+                connect(panel.circuit, r.getPin(0), a.getPin(2)); connect(panel.circuit, s.getPin(0), b.getPin(2));
+                connect(panel.circuit, momentary.getPin(0), led.getPin(0));
+                return null;
+            });
+            javax.swing.JToggleButton play = new javax.swing.JToggleButton(); AtomicInteger notices = new AtomicInteger();
+            LSFrame.bindInstabilityHandler(play, () -> {
+                check(SwingUtilities.isEventDispatchThread(), "Instability UI update outside EDT"); notices.incrementAndGet();
+            });
+            play.addActionListener(e -> {
+                if (play.isSelected()) { panel.circuit.deselectAll(); panel.startSimulation(); }
+                else SIM.stop();
+            });
+            try {
+                SwingUtilities.invokeAndWait(play::doClick); idle();
+                SwingUtilities.invokeAndWait(() -> { equal(false, play.isSelected()); equal(1, notices.get()); });
+                equal(false, SIM.isRunning()); equal(true, SIM.isOscillating());
+                boolean oldA = a.getPin(0).getLevel(), oldB = b.getPin(0).getLevel();
+                Switch chosen = set ? s : r; Gate target = set ? b : a;
+                CaptureWire capture = new CaptureWire(); chosen.getPin(0).addLevelListener(capture);
+                SwingUtilities.invokeAndWait(() -> {
+                    for (int i = 0; i < 3; i++) {
+                        mouse(panel, java.awt.event.MouseEvent.MOUSE_PRESSED, chosen.getX() + 20, chosen.getY() + 20);
+                        mouse(panel, java.awt.event.MouseEvent.MOUSE_RELEASED, chosen.getX() + 20, chosen.getY() + 20);
+                        equal(i != 1, chosen.getPin(0).getLevel());
+                    }
+                    mouse(panel, java.awt.event.MouseEvent.MOUSE_PRESSED, 40, 320);
+                    equal(true, momentary.getPin(0).getLevel());
+                    mouse(panel, java.awt.event.MouseEvent.MOUSE_RELEASED, 40, 320);
+                    equal(false, momentary.getPin(0).getLevel());
+                });
+                idle(); equal(0, capture.count.get()); equal(false, target.getPin(2).getLevel());
+                equal(false, led.getPin(0).getLevel()); equal("1", chosen.getProperty("state"));
+                equal(oldA, a.getPin(0).getLevel()); equal(oldB, b.getPin(0).getLevel());
+                equal(false, SIM.isRunning()); equal(true, SIM.isOscillating());
+                SwingUtilities.invokeAndWait(play::doClick); idle();
+                SwingUtilities.invokeAndWait(() -> { equal(true, play.isSelected()); equal(1, notices.get()); });
+                equal(true, SIM.isRunning()); equal(false, SIM.isOscillating());
+                equal(true, target.getPin(2).getLevel());
+                equal(set, a.getPin(0).getLevel()); equal(!set, b.getPin(0).getLevel());
+                // Removing the recovery stimulus must retain the established state.
+                SwingUtilities.invokeAndWait(() -> {
+                    mouse(panel, java.awt.event.MouseEvent.MOUSE_PRESSED, chosen.getX() + 20, chosen.getY() + 20);
+                    mouse(panel, java.awt.event.MouseEvent.MOUSE_RELEASED, chosen.getX() + 20, chosen.getY() + 20);
+                });
+                idle(); equal(set, a.getPin(0).getLevel()); equal(!set, b.getPin(0).getLevel());
+                equal(true, SIM.isRunning()); equal(false, SIM.isOscillating());
+            } finally { SIM.stop(); SIM.setInstabilityListener(() -> {}); panel.circuit.clear(); }
+        }
+    }
+    private static void staleInstabilityNotice() throws Exception {
+        NOR a = new NOR(), b = new NOR(); Circuit circuit = new Circuit();
+        SIM.withoutEvents(() -> {
+            circuit.addGate(a); circuit.addGate(b);
+            connect(circuit, a.getPin(0), b.getPin(1)); connect(circuit, b.getPin(0), a.getPin(1)); return null;
+        });
+        javax.swing.JToggleButton play = new javax.swing.JToggleButton(); AtomicInteger notices = new AtomicInteger();
+        LSFrame.bindInstabilityHandler(play, notices::incrementAndGet);
+        try {
+            // Keep the EDT busy until a new run has superseded the queued notice.
+            SwingUtilities.invokeAndWait(() -> {
+                SIM.start(); circuit.reset();
+                try { idle(); } catch (Exception e) { throw new RuntimeException(e); }
+                equal(true, SIM.isOscillating());
+                SIM.start(); play.setSelected(true);
+            });
+            SwingUtilities.invokeAndWait(() -> { equal(true, play.isSelected()); equal(0, notices.get()); });
+            equal(true, SIM.isRunning());
+        } finally { SIM.stop(); SIM.setInstabilityListener(() -> {}); circuit.clear(); }
+    }
+    private static void moduleTemplate() throws Exception {
+        MODIN in = (MODIN) at(new MODIN(), 10, 10);
+        MODOUT out = (MODOUT) at(new MODOUT(), 400, 10);
+        NOR a = (NOR) at(new NOR(), 100, 100), b = (NOR) at(new NOR(), 250, 100);
+        LogicSimFile file = circuit(in, out, a, b);
+        connect(file.circuit, a.getPin(0), b.getPin(1)); connect(file.circuit, b.getPin(0), a.getPin(1));
+        connect(file.circuit, in.getOutputs().get(0), a.getPin(2));
+        connect(file.circuit, a.getPin(0), out.getInputs().get(0));
+        Path fixture = Paths.get("modules", "FeedbackTest.lsm"); file.fileName = fixture.toString(); XMLCreator.createXML(file);
+        AtomicInteger notices = new AtomicInteger(); SIM.setInstabilityListener(notices::incrementAndGet);
+        try {
+            SIM.start(); App.reloadModules(); idle();
+            check(App.getGate("feedbacktest") instanceof Module, "Template not loaded");
+            equal(true, SIM.isRunning()); equal(false, SIM.isOscillating()); equal(0, notices.get());
+            Module active = (Module) GateLoaderHelper.create(App.getGate("feedbacktest"));
+            idle(); equal(true, SIM.isOscillating()); equal(1, notices.get()); active.dispose();
+        } finally {
+            SIM.stop(); SIM.setInstabilityListener(() -> {}); Files.deleteIfExists(fixture); App.reloadModules(); file.circuit.clear();
+        }
+    }
+
     private static final class CaptureWire extends Wire {
         final AtomicInteger count = new AtomicInteger(); final CountDownLatch first = new CountDownLatch(1);
         CaptureWire() { super(null, null); }
@@ -328,6 +508,128 @@ public final class RegressionTests {
             equal(1, changes.get()); equal(Gate.XAXIS, gate.mirror); panel.undo(); equal(Gate.NORMAL, panel.circuit.getGates().get(0).mirror);
         });
     }
+    private static void textHitArea() {
+        TextLabel label = (TextLabel) at(new TextLabel(), 200, 200);
+        label.setProperty(CircuitPart.TEXT, "/Long text for a legacy document");
+        for (int rotation = 0; rotation < 4; rotation++) {
+            label.deselect();
+            BufferedImage image = new BufferedImage(600, 600, BufferedImage.TYPE_INT_ARGB);
+            Graphics2D graphics = image.createGraphics();
+            try { label.draw(graphics); } finally { graphics.dispose(); }
+            int pixels = 0;
+            for (int y = 0; y < 600; y++) for (int x = 0; x < 600; x++) {
+                if ((image.getRGB(x, y) >>> 24) != 0) {
+                    pixels++; check(label.insideFrame(x, y), "Text pixel outside hit area at " + x + "," + y);
+                }
+            }
+            check(pixels > 0, "No text rendered");
+            java.awt.Rectangle before = label.getBoundingBox();
+            label.select(); graphics = image.createGraphics();
+            try { label.draw(graphics); } finally { graphics.dispose(); }
+            equal(before, label.getBoundingBox());
+            Gate loaded = roundtrip(circuit(label), "text-rotation-" + rotation).getGates().get(0);
+            equal(before, loaded.getBoundingBox());
+            if (rotation == 0) { equal(230, (int) before.getCenterX()); check(before.contains(230, 210), "Historic text centre moved"); }
+            label.rotate();
+        }
+    }
+
+    private static void mouse(LSPanel panel, int id, int x, int y) {
+        java.awt.event.MouseEvent e = new java.awt.event.MouseEvent(panel, id,
+                System.currentTimeMillis(), 0, x, y, 1, false, java.awt.event.MouseEvent.BUTTON1);
+        if (id == java.awt.event.MouseEvent.MOUSE_DRAGGED)
+            for (java.awt.event.MouseMotionListener l : panel.getMouseMotionListeners()) l.mouseDragged(e);
+        else for (java.awt.event.MouseListener l : panel.getMouseListeners()) {
+            if (id == java.awt.event.MouseEvent.MOUSE_PRESSED) l.mousePressed(e);
+            else l.mouseReleased(e);
+        }
+    }
+    private static void autoWireDrop() throws Exception {
+        SwingUtilities.invokeAndWait(() -> {
+            LSProperties.getInstance().setProperty(LSProperties.AUTOWIRE, "true");
+            LSPanel panel = new LSPanel(); NOT source = new NOT(); LED led = new LED();
+            source.moveTo(100, 100); led.moveTo(300, 100);
+            panel.circuit.addGate(source); panel.circuit.addGate(led); panel.circuit.deselectAll(); led.select();
+            mouse(panel, java.awt.event.MouseEvent.MOUSE_PRESSED, 320, 120);
+            mouse(panel, java.awt.event.MouseEvent.MOUSE_DRAGGED, 320, 120);
+            int dx = source.getPin(1).getX() - led.getPin(0).getX();
+            int dy = source.getPin(1).getY() - led.getPin(0).getY();
+            mouse(panel, java.awt.event.MouseEvent.MOUSE_DRAGGED, 320 + dx, 120 + dy);
+            equal(0, panel.circuit.getWires().size());
+            mouse(panel, java.awt.event.MouseEvent.MOUSE_DRAGGED, 420, 120);
+            mouse(panel, java.awt.event.MouseEvent.MOUSE_RELEASED, 420, 120);
+            equal(0, panel.circuit.getWires().size());
+            mouse(panel, java.awt.event.MouseEvent.MOUSE_PRESSED, led.getX() + 20, led.getY() + 20);
+            mouse(panel, java.awt.event.MouseEvent.MOUSE_DRAGGED, led.getX() + 20, led.getY() + 20);
+            dx = source.getPin(1).getX() - led.getPin(0).getX();
+            dy = source.getPin(1).getY() - led.getPin(0).getY();
+            int x = led.getX() + 20 + dx, y = led.getY() + 20 + dy;
+            mouse(panel, java.awt.event.MouseEvent.MOUSE_DRAGGED, x, y);
+            equal(0, panel.circuit.getWires().size());
+            mouse(panel, java.awt.event.MouseEvent.MOUSE_RELEASED, x, y);
+            equal(1, panel.circuit.getWires().size());
+        });
+        idle();
+    }
+
+    private static void normalBranches() throws Exception {
+        final LSPanel[] saved = new LSPanel[1];
+        SwingUtilities.invokeAndWait(() -> {
+            LSProperties.getInstance().setProperty(LSProperties.MODE, LSProperties.MODE_NORMAL);
+            LSPanel panel = new LSPanel(); saved[0] = panel;
+            NOT source = (NOT) at(new NOT(), 100, 100);
+            LED a = (LED) at(new LED(), 400, 110), b = (LED) at(new LED(), 400, 200), c = (LED) at(new LED(), 400, 300);
+            panel.circuit.addGate(source); panel.circuit.addGate(a); panel.circuit.addGate(b); panel.circuit.addGate(c);
+            Wire trunk = connect(panel.circuit, source.getPin(1), a.getPin(0)); trunk.initializeLevel();
+            panel.circuit.deselectAll();
+            for (LED target : new LED[]{b, c}) {
+                mouse(panel, java.awt.event.MouseEvent.MOUSE_PRESSED, target.getPin(0).getX(), target.getPin(0).getY());
+                int x = 280, y = source.getPin(1).getY();
+                mouse(panel, java.awt.event.MouseEvent.MOUSE_PRESSED, x, y);
+            }
+            equal(3, panel.circuit.getWires().size());
+            equal(null, panel.circuit.getUnfinishedWire());
+            equal(panel.circuit.getWires().get(1).getTo(), panel.circuit.getWires().get(2).getTo());
+        });
+        idle();
+        for (Gate gate : saved[0].circuit.getGates())
+            if (gate instanceof LED) equal(true, gate.getPin(0).getLevel());
+        roundtrip(newFile(saved[0].circuit), "normal-branches");
+    }
+    private static LogicSimFile newFile(Circuit circuit) {
+        LogicSimFile file = new LogicSimFile(null); file.circuit = circuit; return file;
+    }
+
+    private static void dialogLanguage() {
+        Properties previous = I18N.prop; String language = I18N.lang;
+        java.util.Locale locale = java.util.Locale.getDefault();
+        try {
+            java.util.Locale.setDefault(java.util.Locale.US);
+            I18N.prop = I18N.load("de"); I18N.lang = "de"; I18N.configureDialogTexts();
+            equal("Abbrechen", javax.swing.UIManager.getString("OptionPane.cancelButtonText"));
+            equal(I18N.tr(Lang.OK), javax.swing.UIManager.getString("OptionPane.okButtonText"));
+        } finally { I18N.prop = previous; I18N.lang = language; java.util.Locale.setDefault(locale); I18N.configureDialogTexts(); }
+    }
+    private static void hiddenTestGate() throws Exception {
+        equal("hidden", new TEST().category);
+        Path legacy = xml("legacy-test-gate", "<logicsim version='3'><gates><gate type='test' x='100' y='100'/></gates></logicsim>");
+        check(XMLLoader.loadXmlFile(legacy.toString()).getGates().get(0) instanceof TEST, "Old test gate cannot load");
+    }
+    private static void exampleModules() throws Exception {
+        check(Files.exists(Paths.get("modules/beispiele/HA.lsm")), "Missing example HA");
+        check(!Files.exists(Paths.get("modules/HA.lsm")), "HA still occupies student namespace");
+        check(App.getGate("beispiele/ha") instanceof Module, "Example not registered");
+        Path legacy = xml("legacy-adder", "<logicsim version='3'><gates><gate module='true' type='HA' x='100' y='100'/><gate type='led' x='300' y='100'/></gates><wires><wire><from id='HA@100:100' number='16'/><to id='led@300:100' number='0'/></wire></wires></logicsim>");
+        LogicSimFile file = XMLLoader.loadXmlFile(legacy.toString());
+        equal(null, file.getErrorString()); equal(1, file.getWires().size());
+        // User modules have priority over compatibility aliases.
+        Path student = Paths.get("modules/HA.lsm");
+        Files.copy(Paths.get("modules/beispiele/HA.lsm"), student);
+        try { App.reloadModules(); equal("HA", App.getGate("ha").type); }
+        finally { Files.deleteIfExists(student); App.reloadModules(); }
+        adder("beispiele/HA", 2); adder("beispiele/FA", 3);
+    }
+
     private static void emptyText() {
         TextLabel label = new TextLabel(); label.setProperty(CircuitPart.TEXT, "");
         Graphics2D graphics = new BufferedImage(200, 200, BufferedImage.TYPE_INT_ARGB).createGraphics();

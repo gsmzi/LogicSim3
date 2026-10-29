@@ -38,16 +38,25 @@ public class TextLabel extends Gate {
 		return getBoundingBox().contains(mx, my);
 	}
 
-	@Override
-	protected void drawActiveFrame(Graphics2D g2) {
-		g2.setFont(bigFont);
-		if (text != null) {
-			Rectangle r = WidgetHelper.textDimensions(g2, text);
-			width = r.width / 10 * 10 + 10;
-			height = r.height / 10 * 10 + 10;
-			super.drawActiveFrame(g2);
-		}
-	}
+    @Override
+    public Rectangle getBoundingBox() {
+        // Keep the historic 60x20 anchor and rotation centre. Resizing the gate
+        // while painting moved its hit area but not the text in existing files.
+        java.awt.image.BufferedImage image = new java.awt.image.BufferedImage(1, 1,
+                java.awt.image.BufferedImage.TYPE_INT_ARGB);
+        Graphics2D graphics = image.createGraphics();
+        Rectangle size;
+        try { graphics.setFont(bigFont); size = WidgetHelper.textDimensions(graphics, text); }
+        finally { graphics.dispose(); }
+        int cx = xc == -1 ? getX() + 30 : xc;
+        int cy = yc == -1 ? getY() + 10 : yc;
+        int top = cy - size.height / 2 - 4;
+        if (text != null && text.startsWith("/")) top = Math.min(top, cy - size.height + 3);
+        Rectangle bounds = new Rectangle(cx - size.width / 2 - 4,
+                top, size.width + 8, cy + size.height / 2 + 4 - top);
+        return java.awt.geom.AffineTransform.getRotateInstance(
+                Math.toRadians(rotate90 * 90), cx, cy).createTransformedShape(bounds).getBounds();
+    }
 
 	@Override
 	protected void drawFrame(Graphics2D g2) {
@@ -58,11 +67,6 @@ public class TextLabel extends Gate {
 		g2.setFont(bigFont);
 		g2.setColor(Color.black);
 		if (text != null) {
-			Rectangle r = WidgetHelper.textDimensions(g2, text);
-			width = r.width;
-			width = width / 10 * 10 + 10;
-			height = r.height;
-			height = height / 10 * 10 + 10;
 			WidgetHelper.drawString(g2, text, xc, yc, WidgetHelper.ALIGN_CENTER);
 		}
 	}

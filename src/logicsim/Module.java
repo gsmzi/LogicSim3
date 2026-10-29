@@ -43,6 +43,10 @@ public class Module extends Gate {
 	public void loadModule() {
 		String filename = App.getModulePath() + type + "." + App.MODULE_FILE_SUFFIX;
 		File f = new File(filename);
+        if (!f.exists() && ("HA".equalsIgnoreCase(type) || "FA".equalsIgnoreCase(type))) {
+            f = new File(App.getModulePath() + "beispiele/" + type.toUpperCase(java.util.Locale.ROOT) + ".lsm");
+            filename = f.getPath();
+        }
 		if (!f.exists()) {
 			String s = I18N.tr(Lang.MODULENOTFOUND).replaceFirst("%s", type);
 			JOptionPane.showMessageDialog(null, s);

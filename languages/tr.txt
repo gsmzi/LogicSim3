@@ -116,3 +116,5 @@ GATE_MONOFLOP_PROPERTIES=MonoFlop Özellikler
 GATE_TURNONDELAY_TIME=Gecikme s\u00fcresini giriniz (ms)
 GATE_TURNOFFDELAY_TIME=Gecikme s\u00fcresini giriniz (ms)
 
+
+simulation.unstable=Circuit oscillates (unstable state)

@@ -18,7 +18,7 @@ public class TEST extends Gate {
 	static final long serialVersionUID = 4521959944440523564L;
 
 	public TEST() {
-		super("test");
+		super("hidden");
 		label = "TEST";
 		type = "test";
 		width = 80;

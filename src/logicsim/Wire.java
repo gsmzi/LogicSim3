@@ -503,7 +503,7 @@ public class Wire extends CircuitPart implements Cloneable {
 	public void changedLevel(LSLevelEvent e) {
 		// System.out.println(getId() + ": got event " + e);
 		// a wire can get a level change from a pin or another wire
-		if (level != e.level || e.force) {
+		if (level != e.level || e.force || e instanceof InitialLevelEvent) {
 			level = e.level;
 			// forward to other listeners, event must not get back to the origin
 			fireRepaint();
@@ -558,8 +558,28 @@ public class Wire extends CircuitPart implements Cloneable {
 		}
 	}
 
+    private static final class InitialLevelEvent extends LSLevelEvent {
+        InitialLevelEvent(CircuitPart source, boolean level, Wire target) {
+            super(source, level, false, target);
+        }
+    }
+
+    /** Seed only this new connection, without retriggering existing fanout. */
+    public void initializeLevel() {
+        CircuitPart source = getFrom();
+        if (getTo() instanceof Pin && ((Pin) getTo()).isOutput()) source = getTo();
+        else if (getTo() instanceof WirePoint && !(source instanceof Pin && ((Pin) source).isOutput())) source = getTo();
+        boolean current;
+        if (source instanceof Pin) current = ((Pin) source).getLevel();
+        else if (source instanceof WirePoint && source.parent instanceof Wire)
+            current = ((Wire) source.parent).getLevel();
+        else return;
+        Simulation.getInstance().putEvent(new InitialLevelEvent(source, current, this));
+    }
+
 	public void finish() {
 		setTempPoint(null);
+		initializeLevel();
 	}
 
 	public void addPoint(WirePoint wp) {

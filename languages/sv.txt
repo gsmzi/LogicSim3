@@ -117,3 +117,5 @@ GATE_MONOFLOP_PROPERTIES=MonoFlop-egenskaper
 GATE_TURNONDELAY_TIME=Fördröjningstid (ms)
 GATE_TURNOFFDELAY_TIME=Fördröjningstid (ms)
 
+
+simulation.unstable=Circuit oscillates (unstable state)

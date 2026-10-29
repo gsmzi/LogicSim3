@@ -2,7 +2,7 @@
 
 	<tstamp />
 
-	<property name="version" value="3.4-${DSTAMP}" />
+	<property name="version" value="3.5-${DSTAMP}" />
 	<property name="main-class" value="logicsim.App" />
 
 	<property name="release.dir" value="release" />
@@ -37,6 +37,7 @@
 
 	<target name="test" depends="test-compile" description="Run headless regression tests without external dependencies">
 		<mkdir dir="${test.work.dir}" />
+        <delete dir="${test.work.dir}/modules" />
 		<copy todir="${test.work.dir}/modules"><fileset dir="modules" /></copy>
 		<copy todir="${test.work.dir}/circuits"><fileset dir="circuits" /></copy>
 		<copy todir="${test.work.dir}/languages"><fileset dir="languages" /></copy>

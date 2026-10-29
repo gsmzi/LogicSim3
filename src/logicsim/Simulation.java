@@ -22,6 +22,24 @@ public class Simulation implements Runnable {
 	});
 	private final Thread thread;
 	private boolean processing;
+    // Count repeated dispatches per component, not total events: large circuits
+    // and fanout must remain usable. A new external stimulus starts a new budget.
+    private static final int MAX_COMPONENT_EVENTS = 4096;
+    private final java.util.IdentityHashMap<LSLevelListener, Integer> dispatchCounts = new java.util.IdentityHashMap<>();
+    private final ThreadLocal<Boolean> suppressEvents = new ThreadLocal<Boolean>();
+    private volatile boolean oscillating;
+    private volatile Runnable instabilityListener = () -> {};
+
+    public <T> T withoutEvents(java.util.function.Supplier<T> factory) {
+        Boolean previous = suppressEvents.get();
+        suppressEvents.set(true);
+        try { return factory.get(); }
+        finally { if (previous == null) suppressEvents.remove(); else suppressEvents.set(previous); }
+    }
+
+    public boolean isOscillating() { return oscillating; }
+    public void setInstabilityListener(Runnable listener) { instabilityListener = listener; }
+
 	private long dispatchGeneration;
 	public static final int WIRE = 0;
 	public static final int GATE = 1;
@@ -36,17 +54,19 @@ public class Simulation implements Runnable {
 	}
 
 	public void start() {
-		synchronized (executionLock) { running = true; }
+		synchronized (executionLock) { oscillating = false; running = true; }
 	}
 
 	/** Cancel pending propagation and timers; later editing events remain usable. */
 	public void stop() {
 		synchronized (executionLock) {
 			running = false;
+            oscillating = false;
 			synchronized (this) {
 				// Invalidate and clear atomically with dequeueing. Otherwise an old
 				// queued event could acquire the new generation during stop().
 				generation++;
+                dispatchCounts.clear();
 				wires.clear();
 				gates.clear();
 				notifyAll();
@@ -74,7 +94,8 @@ public class Simulation implements Runnable {
 	}
 
 	public synchronized void putEvent(LSLevelEvent event) {
-		if (event.target == null) return;
+		if (event.target == null || Boolean.TRUE.equals(suppressEvents.get())) return;
+        if (Thread.currentThread() != thread) dispatchCounts.clear();
 		if (Thread.currentThread() == thread && dispatchGeneration != generation) return;
 		if (event.target instanceof Wire || event.target instanceof WirePoint)
 			wires.add(event);
@@ -102,6 +123,7 @@ public class Simulation implements Runnable {
 			long eventGeneration;
 			synchronized (this) {
 				while (wires.isEmpty() && gates.isEmpty()) {
+                    dispatchCounts.clear();
 					try { wait(); }
 					catch (InterruptedException e) {
 						Thread.currentThread().interrupt();
@@ -122,7 +144,18 @@ public class Simulation implements Runnable {
 				synchronized (executionLock) {
 					if (eventGeneration == generation) {
 						dispatchGeneration = eventGeneration;
-						event.target.changedLevel(event);
+                        boolean unstable;
+                        synchronized (this) {
+                            Integer count = dispatchCounts.get(event.target);
+                            int next = count == null ? 1 : count + 1;
+                            dispatchCounts.put(event.target, next);
+                            unstable = next > MAX_COMPONENT_EVENTS;
+                        }
+                        if (unstable) {
+                            stop();
+                            oscillating = true;
+                            instabilityListener.run();
+                        } else event.target.changedLevel(event);
 					}
 				}
 			} catch (RuntimeException e) {

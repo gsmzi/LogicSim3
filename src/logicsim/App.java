@@ -121,13 +121,24 @@ public class App {
 		loadModules();
 	}
 
+    private static void collectModules(File directory, String prefix, List<String> names) {
+        File[] files = directory.listFiles();
+        if (files == null) return;
+        for (File file : files) {
+            if (file.isDirectory()) collectModules(file, prefix + file.getName() + "/", names);
+            else if (file.getName().endsWith(".lsm")) names.add(prefix + file.getName());
+        }
+    }
+
 	private static void loadModules() {
 		/*
 		 * module part
 		 */
 		File mods = new File(App.getModulePath());
 		// list of filenames in modules dir
-		String[] list = mods.list();
+		ArrayList<String> names = new ArrayList<String>();
+        collectModules(mods, "", names);
+        String[] list = names.toArray(new String[0]);
 		if (list == null)
 			return;
 		Arrays.sort(list, String.CASE_INSENSITIVE_ORDER);
@@ -140,7 +151,7 @@ public class App {
 		for (int i = 0; i < list.length; i++) {
 			if (list[i].endsWith(App.MODULE_FILE_SUFFIX)) {
 				String filename = list[i];
-				String type = new File(filename).getName();
+				String type = filename;
 				type = type.substring(0, type.lastIndexOf("."));
 				//type = type.toLowerCase();
 				modules.put(type, XMLLoader.getModuleListFromFile(App.getModulePath() + "/" + filename));
@@ -152,13 +163,16 @@ public class App {
 			for (String modname : modules.keySet()) {
 				boolean load = true;
 				for (String neededModuleName : modules.get(modname)) {
-					if (!loadedModules.contains(neededModuleName.toLowerCase())) {
+					String needed = neededModuleName.toLowerCase(java.util.Locale.ROOT);
+                    if (!modules.keySet().stream().anyMatch(name -> name.equalsIgnoreCase(neededModuleName)) && ("ha".equals(needed) || "fa".equals(needed)))
+                        needed = "beispiele/" + needed;
+                    if (!loadedModules.contains(needed)) {
 						load = false;
 						break;
 					}
 				}
 				if (load && !loadedModules.contains(modname.toLowerCase())) {
-					Module mod = new Module(modname);
+					Module mod = Simulation.getInstance().withoutEvents(() -> new Module(modname));
 					mod.category = "module";
 					addToCategory(mod);
 					loadedModules.add(modname.toLowerCase());
@@ -170,7 +184,9 @@ public class App {
 
 	public static void reloadModules() {
 		for (Iterator<Category> iterator = cats.iterator(); iterator.hasNext();) {
-			if ("module".equals(iterator.next().getTitle())) {
+			Category category = iterator.next();
+            if ("module".equals(category.getTitle())) {
+                for (Gate gate : category.getGates()) gate.dispose();
 				iterator.remove();
 			}
 		}
@@ -212,6 +228,9 @@ public class App {
 				}
 			}
 		}
+        // Legacy files still resolve the bundled names if no classroom module
+        // with that name exists. The palette only shows namespaced examples.
+        if ("ha".equals(type) || "fa".equals(type)) return getGate("beispiele/" + type);
 		return null;
 	}
 

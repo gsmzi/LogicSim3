@@ -128,6 +128,8 @@ public class XMLLoader {
 			if (g == null)
 				throw new RuntimeException("gate type '" + type + "' not there");
 			gate = GateLoaderHelper.create(g);
+            if (gate instanceof Module && !g.type.equalsIgnoreCase(type))
+                gate.type = gnode.string("type"); // preserve legacy wire IDs
 		} catch (Exception e) {
 			throw new RuntimeException(e.getMessage());
 		}

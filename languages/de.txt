@@ -5,7 +5,7 @@ addpoint.help=Klicke auf ein Kabel um einen Punkt hinzuzuf\u00FCgen
 addpoint=Punkt zu Kabel hinzuf\u00FCgen
 autowire=Autom. Verkabelung
 basic=Grundgatter
-cancel=Abbruch
+cancel=Abbrechen
 connected=verbunden
 copy=Kopieren
 colormode=Farbmodus
@@ -95,3 +95,5 @@ undo=R\u00FCckg\u00E4ngig
 expert=Experte
 wire=Kabel
 normal=Normal
+
+simulation.unstable=Schaltung schwingt (instabiler Zustand)

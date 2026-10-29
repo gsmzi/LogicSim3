@@ -56,3 +56,5 @@ inputnorm.help=pulsa en la entrada para eliminar sus ajustes
 inputinv.help=pulsa en la entrada para invertirla
 inputhigh.help=pulsa en la entrada para colocarla a nivel alto
 inputlow.help=pulsa en la entrada para colocarla a nivel bajo
+
+simulation.unstable=Circuit oscillates (unstable state)

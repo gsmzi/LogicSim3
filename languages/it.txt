@@ -116,3 +116,5 @@ GATE_MONOFLOP_PROPERTIES=Proprietà MonoFlop
 GATE_TURNONDELAY_TIME=Inserisci Tempo di Ritardo (ms)
 GATE_TURNOFFDELAY_TIME=Inserisci Tempo di Ritardo (ms)
 
+
+simulation.unstable=Circuit oscillates (unstable state)

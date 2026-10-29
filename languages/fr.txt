@@ -57,3 +57,5 @@ removepoint=Supprimer un point de connexion
 cancel=Annuler
 no=Non
 yes=Oui
+
+simulation.unstable=Circuit oscillates (unstable state)

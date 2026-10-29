@@ -116,3 +116,5 @@ GATE_MONOFLOP_PROPERTIES=MonoFlop Eigenschappen
 GATE_TURNONDELAY_TIME=Voer Vertraging in (ms)
 GATE_TURNOFFDELAY_TIME=Voer vertraging in (ms)
 
+
+simulation.unstable=Circuit oscillates (unstable state)

@@ -27,6 +27,7 @@ import logicsim.LSLevelEvent;
 import logicsim.LSMouseEvent;
 import logicsim.Lang;
 import logicsim.Pin;
+import logicsim.Simulation;
 import logicsim.WidgetHelper;
 
 /**
@@ -80,10 +81,18 @@ public class Switch extends Gate {
 
 	@Override
 	public void interact() {
-		getPin(0).changedLevel(new LSLevelEvent(this, !getPin(0).getLevel()));
+		setSwitchLevel(!getPin(0).getLevel());
 		// save state in property
 		setPropertyInt(STATE, getPin(0).getLevel() ? 1 : 0);
 	}
+
+    private void setSwitchLevel(boolean level) {
+        if (Simulation.getInstance().isRunning())
+            getPin(0).changedLevel(new LSLevelEvent(this, level));
+        else
+            getPin(0).setLevel(level);
+        fireRepaint();
+    }
 
 	@Override
 	public void mousePressedSim(LSMouseEvent e) {
@@ -91,11 +100,10 @@ public class Switch extends Gate {
 
 		if (switchTypeMomentary) {
 			// momentary-Button, will be deactivated if mouseReleased is called
-			getPin(0).changedLevel(new LSLevelEvent(this, HIGH));
-			fireRepaint();
+			setSwitchLevel(HIGH);
 		} else {
 			// Toggle-Button
-			getPin(0).changedLevel(new LSLevelEvent(this, !getPin(0).getLevel()));
+			setSwitchLevel(!getPin(0).getLevel());
 			// save state in property
 			setPropertyInt(STATE, getPin(0).getLevel() ? 1 : 0);
 		}
@@ -105,8 +113,7 @@ public class Switch extends Gate {
 	public void mouseReleased(int mx, int my) {
 		// deactivate momentary-Button
 		if (switchTypeMomentary) {
-			getPin(0).changedLevel(new LSLevelEvent(this, LOW));
-			fireRepaint();
+			setSwitchLevel(LOW);
 		}
 	}
 
