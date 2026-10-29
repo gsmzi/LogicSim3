@@ -381,8 +381,10 @@ public class Circuit implements LSRepaintListener {
 	}
 
 	public void reset() {
-		for (CircuitPart p : getGates())
-			p.reset();
+		Simulation.getInstance().initializeCircuit(() -> {
+			for (CircuitPart p : getGates())
+				p.reset();
+		});
 	}
 
 	public void remove(CircuitPart part) {

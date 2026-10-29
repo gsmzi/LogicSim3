@@ -36,11 +36,12 @@ public final class RegressionTests {
         test("logic gate truth tables", RegressionTests::truthTables);
         test("XOR does not clock a counter spuriously", RegressionTests::xorCounter);
         test("stopping a feedback loop remains responsive", () -> { for (int i = 0; i < 25; i++) feedback(); });
-        test("NOR feedback is bounded and reports instability", RegressionTests::boundedFeedback);
+        test("circuit reset completes before feedback propagation", RegressionTests::resetBeforePropagation);
+        test("NOR feedback is bounded and reports instability", () -> { for (int i = 0; i < 25; i++) boundedFeedback(); });
         test("stopped NOR feedback recovers through switches and one play click", RegressionTests::recoverFeedback);
         test("packaged JAR recovers with gates outside the application classpath", RegressionTests::packagedRecovery);
         test("old instability notification cannot deselect a restarted simulation", RegressionTests::staleInstabilityNotice);
-        test("feedback module templates never schedule events", RegressionTests::moduleTemplate);
+        test("feedback module templates never schedule events", () -> { for (int i = 0; i < 25; i++) moduleTemplate(); });
         test("clock pauses and resumes without painting", RegressionTests::clock);
         test("null events do not block propagation", RegressionTests::nullTarget);
         test("large fanout does not lose events", RegressionTests::fanout);
@@ -282,6 +283,28 @@ public final class RegressionTests {
             CaptureWire capture = new CaptureWire();
             SIM.putEvent(new LSLevelEvent(a, true, false, capture)); idle(); equal(1, capture.count.get());
         } finally { SIM.setInstabilityListener(() -> {}); circuit.clear(); }
+    }
+    private static void resetBeforePropagation() throws Exception {
+        // Give the worker time to drain the first gate's reset events before the
+        // second gate is reset. Without an atomic reset this seeds a stable latch
+        // instead of the intended symmetric feedback state.
+        NOR a = new NOR() {
+            @Override public void reset() {
+                super.reset();
+                try {
+                    check(!SIM.awaitIdle(100), "Signals propagated before circuit reset completed");
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt(); throw new RuntimeException(e);
+                }
+            }
+        };
+        NOR b = new NOR(); Circuit circuit = new Circuit();
+        circuit.addGate(a); circuit.addGate(b);
+        connect(circuit, a.getPin(0), b.getPin(1)); connect(circuit, b.getPin(0), a.getPin(1));
+        try {
+            SIM.start(); circuit.reset(); idle();
+            equal(false, SIM.isRunning()); equal(true, SIM.isOscillating());
+        } finally { SIM.stop(); circuit.clear(); }
     }
     private static void recoverFeedback() throws Exception {
         // Recover into either stable state, using the same mouse path as the UI.

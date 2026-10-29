@@ -57,6 +57,13 @@ public class Simulation implements Runnable {
 		synchronized (executionLock) { oscillating = false; running = true; }
 	}
 
+	/** Queue the complete initial state before dispatching any of its signals. */
+	void initializeCircuit(Runnable initialization) {
+		// Use the same lock order as dispatch, stop and timer callbacks. Nested
+		// module resets are safe because Java monitors are reentrant.
+		synchronized (executionLock) { initialization.run(); }
+	}
+
 	/** Cancel pending propagation and timers; later editing events remain usable. */
 	public void stop() {
 		synchronized (executionLock) {
