@@ -45,6 +45,11 @@ adder modules and all supplied example circuits. A failing test produces a nonze
 exit code. Test classes, copied fixtures and generated files stay under `build/`;
 the original circuits, modules and user configuration are not changed.
 
+The tests also build the application JAR and start a separate Java process with
+gate classes absent from its application classpath. It loads gates from their
+external folder and checks recovery after an instability stop through mouse
+interaction, matching the distribution's class loader setup.
+
 Create the distribution with `ant dist`. Gate classes remain available to tests
 after packaging, so `ant dist test` is also supported. GitHub Actions runs the suite
 on Java 8 and Java 21 for pushes and pull requests.

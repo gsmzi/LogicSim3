@@ -35,18 +35,21 @@
 		</javac>
 	</target>
 
-	<target name="test" depends="test-compile" description="Run headless regression tests without external dependencies">
+	<target name="test" depends="test-compile,jar" description="Run headless regression tests without external dependencies">
 		<mkdir dir="${test.work.dir}" />
         <delete dir="${test.work.dir}/modules" />
 		<copy todir="${test.work.dir}/modules"><fileset dir="modules" /></copy>
 		<copy todir="${test.work.dir}/circuits"><fileset dir="circuits" /></copy>
 		<copy todir="${test.work.dir}/languages"><fileset dir="languages" /></copy>
+		<delete dir="${test.work.dir}/gates" />
+		<copy todir="${test.work.dir}/gates"><fileset dir="${classes.dir}/gates" /></copy>
 		<echo file="${test.work.dir}/logicsim.cfg">language=en&#10;gatedesign=iec&#10;paintgrid=false</echo>
 		<java classname="logicsim.RegressionTests" fork="true" failonerror="true"
 				timeout="60000" dir="${test.work.dir}">
 			<classpath><pathelement location="${classes.dir}" /><pathelement location="${test.classes.dir}" /></classpath>
 			<sysproperty key="java.awt.headless" value="true" />
 			<sysproperty key="project.dir" value="${basedir}" />
+			<sysproperty key="packaged.jar" value="${jar.dir}/${ant.project.name}.jar" />
 		</java>
 	</target>
 

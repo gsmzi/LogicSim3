@@ -38,6 +38,7 @@ public final class RegressionTests {
         test("stopping a feedback loop remains responsive", () -> { for (int i = 0; i < 25; i++) feedback(); });
         test("NOR feedback is bounded and reports instability", RegressionTests::boundedFeedback);
         test("stopped NOR feedback recovers through switches and one play click", RegressionTests::recoverFeedback);
+        test("packaged JAR recovers with gates outside the application classpath", RegressionTests::packagedRecovery);
         test("old instability notification cannot deselect a restarted simulation", RegressionTests::staleInstabilityNotice);
         test("feedback module templates never schedule events", RegressionTests::moduleTemplate);
         test("clock pauses and resumes without painting", RegressionTests::clock);
@@ -343,6 +344,24 @@ public final class RegressionTests {
                 equal(true, SIM.isRunning()); equal(false, SIM.isOscillating());
             } finally { SIM.stop(); SIM.setInstabilityListener(() -> {}); panel.circuit.clear(); }
         }
+    }
+    private static void packagedRecovery() throws Exception {
+        Path application = Paths.get(Gate.class.getProtectionDomain().getCodeSource().getLocation().toURI());
+        if (!application.toString().endsWith(".jar"))
+            application = Paths.get(System.getProperty("project.dir")).resolve(System.getProperty("packaged.jar"));
+        check(Files.isRegularFile(application), "Packaged JAR missing: " + application);
+        Path harness = Paths.get(RegressionTests.class.getProtectionDomain().getCodeSource().getLocation().toURI());
+        String classpath = application.toAbsolutePath() + java.io.File.pathSeparator + harness.toAbsolutePath();
+        Path output = OUTPUT.resolve("packaged-recovery.log");
+        Process process = new ProcessBuilder(Paths.get(System.getProperty("java.home"), "bin", "java").toString(),
+                "-Djava.awt.headless=true", "-cp", classpath, "logicsim.PackagedRegressionTests")
+                .redirectErrorStream(true).redirectOutput(output.toFile()).start();
+        try {
+            check(process.waitFor(15, TimeUnit.SECONDS), "Packaged regression timed out");
+            String log = new String(Files.readAllBytes(output), StandardCharsets.UTF_8);
+            check(process.exitValue() == 0, "Packaged regression failed:\n" + log);
+            check(log.contains("PASS: isolated packaged recovery"), "Packaged regression did not complete:\n" + log);
+        } finally { process.destroyForcibly(); }
     }
     private static void staleInstabilityNotice() throws Exception {
         NOR a = new NOR(), b = new NOR(); Circuit circuit = new Circuit();

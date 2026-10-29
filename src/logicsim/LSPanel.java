@@ -219,8 +219,10 @@ public class LSPanel extends Viewer implements Printable, CircuitChangedListener
 
             // After an instability stop, prepare an input for the next start
             // without selecting/moving the switch or propagating its level.
+            // Gate implementations use a separate loader in the packaged app.
             if (!simRunning && Simulation.getInstance().isOscillating()
-                    && cp instanceof gates.Switch && currentAction == ACTION_NONE
+                    && cp instanceof Gate && "switch".equals(((Gate) cp).type)
+                    && currentAction == ACTION_NONE
                     && !e.isAltDown() && !e.isShiftDown()) {
                 recordUndoState();
                 cp.mousePressedSim(new LSMouseEvent(e, currentAction, parts));

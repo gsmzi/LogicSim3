@@ -156,3 +156,38 @@ Prüfung: `ant test` – **54 Tests erfolgreich, 0 fehlgeschlagen**.
 Release mit `ant dist` neu gebaut: `release/LogicSim-3.5-20261029.zip`.
 Dieselben 54 Tests bestehen auch gegen das entpackte Release mit dessen JAR,
 Gatterklassen und tatsächlicher Initialisierung der Bauteilliste.
+
+---
+
+### 8. Punkt 7 wirkt im ausgelieferten Programm nicht: `NoClassDefFoundError: gates/Switch` (mittel)
+
+**Reproduktion:** Release entpacken und LogicSim normal über `LogicSim.jar` starten. NOR-Rückkopplung mit S = R = 0 öffnen, Simulieren → „Schaltung schwingt“. Danach einen Schalter anklicken: Der Schalter bleibt unverändert, auf der Konsole erscheint
+`Exception in thread "AWT-EventQueue-0" java.lang.NoClassDefFoundError: gates/Switch`.
+
+**Ursache:** `src/logicsim/LSPanel.java`, Z. 223: `cp instanceof gates.Switch`. Im Release enthält `LogicSim.jar` die Gatterklassen nicht (`build.xml`: `excludes="gates/**"`); sie werden zur Laufzeit über einen eigenen `URLClassLoader` aus dem Ordner `gates` geladen. Für den Klassenlader des JAR existiert `gates.Switch` daher nicht. Die Regressionstests laufen mit den Gatterklassen im Klassenpfad und bemerken das nicht.
+
+**Vorschlag:** Im Paket `logicsim` keine Klassen aus `gates` direkt referenzieren, sondern z. B. `cp instanceof Gate && "switch".equals(((Gate) cp).type)` verwenden, oder `mousePressedSim` generisch für Eingabe-Bauteile aufrufen. Zusätzlich einen Test ergänzen, der das gebaute JAR mit `java -cp LogicSim.jar` (ohne `gates` im Klassenpfad) startet und prüft, dass `logicsim`-Klassen keine `gates.*`-Klassen referenzieren (z. B. `javap -c` auf `gates/` durchsuchen).
+
+**Akzeptanz:** Im entpackten Release, gestartet mit `java -jar LogicSim.jar`, lässt sich nach „Schaltung schwingt“ ein Schalter umlegen; danach startet ein Klick auf Simulieren die Schaltung im festgelegten Zustand.
+
+#### Erledigt am 29.10.2026
+
+Die direkte Referenz auf `gates.Switch` in `LSPanel` ist durch die Prüfung auf
+`Gate` und den vorhandenen Typ `switch` ersetzt. Dadurch benötigt der
+Klassenlader des Anwendungs-JAR keine Kenntnis der extern geladenen Gatterklasse.
+
+`RegressionTests.java` startet nun `PackagedRegressionTests` in einer separaten
+Java-Instanz. Deren Klassenpfad enthält ausschließlich das gebaute Anwendungs-JAR
+und die Testklassen, keinen Gatterordner. Der Test prüft ausdrücklich, dass der
+Anwendungsklassenlader weder `gates.Switch` noch `gates.NOR` laden kann und die
+Gatter über den regulären externen Klassenlader verfügbar werden. Anschließend
+prüft er per Mausbedienung den Schwingungsstopp, das Umlegen von S bzw. R ohne
+vorzeitige Weitergabe, den Neustart mit einem Klick und beide stabilen Zustände.
+`ant test` baut dafür automatisch das aktuelle JAR und kopiert die externen
+Gatter in das Testverzeichnis. Die Prüfung läuft damit auch in der bestehenden CI.
+
+Vor der Korrektur schlug der neue Test mit dem gemeldeten
+`NoClassDefFoundError: gates/Switch` fehl. Nach der Korrektur bestehen alle
+**55 Tests** mit `ant test dist`. Auch gegen das entpackte Release bestehen alle
+55 Tests einschließlich der Prüfung mit getrennten Klassenladern. Das Release
+`release/LogicSim-3.5-20261029.zip` und die JAR im Projektordner sind aktualisiert.
